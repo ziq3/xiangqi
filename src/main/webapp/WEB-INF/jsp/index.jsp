@@ -39,8 +39,8 @@
 
             engineWorker.onmessage = function (event) {
                 const line = event.data;
+                console.log(line);
                 if (line.startsWith("bestmove")) {
-                    sendCommand(line);
                     let bestMove = line.split(" ")[1];
                     currentMoveHistory += " " + bestMove;
                     let moveForBoard = bestMove.substring(0, 2) + '-' + bestMove.substring(2, 4);
