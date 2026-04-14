@@ -3,7 +3,7 @@
     <html>
 
     <head>
-        <title>Cờ tướng</title>
+        <title>Cờ tướng - Vs Computer</title>
         <link rel="stylesheet" href="${pageContext.request.contextPath}/css/xiangqiboard-0.3.3.min.css">
     </head>
     <style>
@@ -16,6 +16,8 @@
             top: 12px;
             right: 12px;
             z-index: 1000;
+            display: flex;
+            gap: 8px;
         }
     </style>
 
@@ -23,7 +25,10 @@
         <div id="myBoard"></div>
         <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
         <script src="${pageContext.request.contextPath}/js/xiangqiboard-0.3.3.min.js"></script>
-        <a class="login-btn top-right" href="${pageContext.request.contextPath}/login">Login</a>
+        <div class="top-right">
+            <a href="${pageContext.request.contextPath}/h2h">Human vs Human</a>
+            <a href="${pageContext.request.contextPath}/login">Login</a>
+        </div>
         <script>
 
 
@@ -53,6 +58,9 @@
                 currentMoveHistory += " " + userMove;
                 sendCommand("position startpos moves " + currentMoveHistory);
                 sendCommand("go movetime 500");
+            }
+            function onDragStart(source, piece) {
+                if (piece.search(/^b/) !== -1) return false
             }
 
             const config = {
