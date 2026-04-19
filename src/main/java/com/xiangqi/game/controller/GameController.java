@@ -3,33 +3,20 @@ package com.xiangqi.game.controller;
 import com.xiangqi.game.model.Room;
 import com.xiangqi.game.service.RoomService;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Controller;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.security.Principal;
 
-@Controller
+@RestController
 public class GameController {
     RoomService roomService;
+    PasswordEncoder passwordEncoder;
 
     public GameController(RoomService roomService) {
         this.roomService = roomService;
-    }
-
-    @GetMapping("/")
-    public String home() {
-        return "index"; // Chỉ làm nhiệm vụ trả về file giao diện
-    }
-
-    @GetMapping("/login")
-    public String login() {
-        return "login";
-    }
-
-    @GetMapping("/h2h")
-    public String humanVsHuman() {
-        return "h2h";
     }
 
     @PostMapping("/api/room/create")
@@ -44,8 +31,8 @@ public class GameController {
     @PostMapping("/api/room/{roomId}/join")
     @ResponseBody
     public RoomStateResponse joinRoom(@PathVariable String roomId,
-                                      @RequestParam(required = false) String playerName,
-                                      Principal principal) {
+            @RequestParam(required = false) String playerName,
+            Principal principal) {
         String resolvedPlayer = resolvePlayerName(playerName, principal);
         Room room = roomService.joinRoom(roomId, resolvedPlayer);
         return RoomStateResponse.from(room);
@@ -58,23 +45,43 @@ public class GameController {
         return RoomStateResponse.from(room);
     }
 
+    public record MoveRequest(String move) {
+    }
+
     @PostMapping("/api/room/{roomId}/move")
     @ResponseBody
-    public RoomStateResponse applyMove(@PathVariable String roomId,
-                                       @RequestParam String move,
-                                       Principal principal) {
-        Room room = roomService.applyMove(roomId, move);
+    public RoomStateResponse applyMove(
+            @PathVariable String roomId,
+            @RequestBody MoveRequest payload, 
+            Principal principal) {
+
+        Room room = roomService.applyMove(roomId, payload.move());
         return RoomStateResponse.from(room);
     }
 
     private String resolvePlayerName(String providedName, Principal principal) {
+        if (principal instanceof JwtAuthenticationToken jwtToken) {
+            java.util.Map<String, Object> userMetadata = (java.util.Map<String, Object>) jwtToken.getTokenAttributes()
+                    .get("user_metadata");
+
+            if (userMetadata != null && userMetadata.containsKey("username")) {
+                return userMetadata.get("username").toString().trim();
+            }
+
+            if (jwtToken.getTokenAttributes().containsKey("email")) {
+                return jwtToken.getTokenAttributes().get("email").toString().trim();
+            }
+
+            return principal.getName().trim();
+        }
+
+
         if (providedName != null && !providedName.isBlank()) {
             return providedName.trim();
         }
-        if (principal != null) {
-            return principal.getName().trim();
-        }
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "playerName is required");
+
+        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                "You must be logged in or provide a guest name to play");
     }
 
     private record RoomStateResponse(
@@ -83,8 +90,7 @@ public class GameController {
             String guestName,
             String turn,
             String status,
-            String moveHistory,
-            String boardStartFen) {
+            String fen) {
         private static RoomStateResponse from(Room room) {
             return new RoomStateResponse(
                     room.getRoomId(),
@@ -92,8 +98,7 @@ public class GameController {
                     room.getGuestName(),
                     room.getTurn().name(),
                     room.getStatus().name(),
-                    room.getMoveHistory(),
-                    "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
+                    room.getFen());
         }
     }
 

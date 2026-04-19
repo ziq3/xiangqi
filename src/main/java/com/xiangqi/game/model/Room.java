@@ -44,15 +44,17 @@ public class Room {
     private Status status;
 
     @Column(nullable = false, length = 4096)
-    private String moveHistory;
+    private String fen;
+
 
     public Room() {
         this.turn = Turn.HOST;
         this.status = Status.WAITING;
-        this.moveHistory = "";
+        this.fen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+        this.guestName = "BOT";
     }
 
     public boolean canJoin() {
-        return guestName == null || guestName.isBlank();
+        return guestName.equals("BOT");
     }
 }
