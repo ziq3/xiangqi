@@ -48,13 +48,11 @@ public class RoomService {
   }
 
   @Transactional
-  public Room applyMove(String roomId,String move) {
+  public Room applyMove(String roomId,String fen) {
 
     Room room = getRoomForUpdate(roomId);
-
+    room.setFen(fen);
     boolean hostTurn = room.getTurn() == Turn.HOST;
-    String history = room.getMoveHistory();
-    room.setMoveHistory(history.isBlank() ? move : history + " " + move);
     room.setTurn(hostTurn ? Turn.GUEST : Turn.HOST);
     return room;
   }
