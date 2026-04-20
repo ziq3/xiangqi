@@ -13,23 +13,19 @@ import java.security.Principal;
 @RestController
 public class GameController {
     RoomService roomService;
-    PasswordEncoder passwordEncoder;
 
     public GameController(RoomService roomService) {
         this.roomService = roomService;
     }
 
     @PostMapping("/api/room/create")
-    @ResponseBody
     public RoomStateResponse createRoom(@RequestParam(required = false) String hostName, Principal principal) {
         String resolvedHost = resolvePlayerName(hostName, principal);
         Room room = roomService.createRoom(resolvedHost);
         return RoomStateResponse.from(room);
-
     }
 
     @PostMapping("/api/room/{roomId}/join")
-    @ResponseBody
     public RoomStateResponse joinRoom(@PathVariable String roomId,
             @RequestParam(required = false) String playerName,
             Principal principal) {
@@ -39,7 +35,6 @@ public class GameController {
     }
 
     @GetMapping("/api/room/{roomId}")
-    @ResponseBody
     public RoomStateResponse getRoom(@PathVariable String roomId) {
         Room room = roomService.getRoom(roomId);
         return RoomStateResponse.from(room);
@@ -49,10 +44,9 @@ public class GameController {
     }
 
     @PostMapping("/api/room/{roomId}/move")
-    @ResponseBody
     public RoomStateResponse applyMove(
             @PathVariable String roomId,
-            @RequestBody MoveRequest payload, 
+            @RequestBody MoveRequest payload,
             Principal principal) {
 
         Room room = roomService.applyMove(roomId, payload.move());
@@ -74,7 +68,6 @@ public class GameController {
 
             return principal.getName().trim();
         }
-
 
         if (providedName != null && !providedName.isBlank()) {
             return providedName.trim();
