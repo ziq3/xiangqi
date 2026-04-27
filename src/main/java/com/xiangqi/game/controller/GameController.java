@@ -3,7 +3,6 @@ package com.xiangqi.game.controller;
 import com.xiangqi.game.model.Room;
 import com.xiangqi.game.service.RoomService;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -37,6 +36,12 @@ public class GameController {
     @GetMapping("/api/room/{roomId}")
     public RoomStateResponse getRoom(@PathVariable String roomId) {
         Room room = roomService.getRoom(roomId);
+        return RoomStateResponse.from(room);
+    }
+
+    @PostMapping("/api/room/{roomId}/start")
+    public RoomStateResponse startRoom(@PathVariable String roomId) {
+        Room room = roomService.startRoom(roomId);
         return RoomStateResponse.from(room);
     }
 
