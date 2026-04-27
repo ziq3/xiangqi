@@ -18,9 +18,11 @@ public class RoomService {
 
   private final SecureRandom random = new SecureRandom();
   private final RoomRepository roomRepository;
+  private final EngineService engineService;
 
-  public RoomService(RoomRepository roomRepository) {
+  public RoomService(RoomRepository roomRepository, EngineService engineService) {
     this.roomRepository = roomRepository;
+    this.engineService = engineService;
   }
 
   @Transactional
@@ -48,14 +50,31 @@ public class RoomService {
   }
 
   @Transactional
-  public Room applyMove(String roomId,String fen) {
+  public Room startRoom(String roomId) {
+    Room room = getRoomForUpdate(roomId);
+    if (room.getStatus() == Status.WAITING) {
+      room.setStatus(Status.PLAYING);
+    }
+    return room;
+  }
 
+  @Transactional
+  public Room applyMove(String roomId,String fen) {
     Room room = getRoomForUpdate(roomId);
     room.setFen(fen);
     boolean hostTurn = room.getTurn() == Turn.HOST;
     room.setTurn(hostTurn ? Turn.GUEST : Turn.HOST);
+
+    if ("BOT".equals(room.getGuestName())) {
+        String newFen = engineService.getFenAfterBestMove(fen);
+        if (newFen != null) {
+            room.setFen(newFen);
+            room.setTurn(Turn.HOST);
+        }
+    }
     return room;
   }
+
 
   @Transactional(readOnly = true)
   public Room getRoom(String roomId) {
