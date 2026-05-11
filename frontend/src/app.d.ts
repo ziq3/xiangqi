@@ -8,6 +8,7 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+	const Xiangqi: any;
 	interface Window {
         Xiangqiboard: any;
         Xiangqi: any;

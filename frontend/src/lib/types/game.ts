@@ -11,10 +11,6 @@ export interface RoomState {
 	fen: string;
 }
 
-export interface MoveRequest {
-	move: string;
-}
-
 export class ApiError extends Error {
 	readonly status: number;
 
