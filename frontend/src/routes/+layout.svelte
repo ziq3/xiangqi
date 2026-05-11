@@ -20,8 +20,10 @@
 <header class="topbar">
 	<nav class="nav-links">
 		<a href="/">Trang chu</a>
-		<a href="/login">Dang nhap</a>
-		<a href="/register">Dang ky</a>
+		{#if !$authStore.user}
+			<a href="/login">Dang nhap</a>
+			<a href="/register">Dang ky</a>
+		{/if}
 	</nav>
 
 	<div class="session-controls">
