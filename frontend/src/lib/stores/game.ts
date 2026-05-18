@@ -80,8 +80,15 @@ function createGameStore() {
 			roomId,
 			onState: (room) => {
 				update((current) => {
-					if (current.pendingMove) {
-						return current;
+					if (current.pendingMove && current.room) {
+						return {
+							...current,
+							room: {
+								...room,
+								// Keep local optimistic FEN while move is pending.
+								fen: current.room.fen
+							}
+						};
 					}
 					return { ...current, room };
 				});

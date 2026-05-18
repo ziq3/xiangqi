@@ -9,6 +9,9 @@ export interface RoomState {
 	turn: Turn;
 	status: RoomStatus;
 	fen: string;
+	hostTimeMs: number;
+	guestTimeMs: number;
+	endReason: string | null;
 }
 
 export class ApiError extends Error {
@@ -35,7 +38,8 @@ export function parseRoomState(payload: unknown): RoomState {
 	}
 
 	const candidate = payload as Record<string, unknown>;
-	const { roomId, hostName, guestName, turn, status, fen } = candidate;
+	const { roomId, hostName, guestName, turn, status, fen, hostTimeMs, guestTimeMs, endReason } =
+		candidate;
 
 	if (
 		typeof roomId !== 'string' ||
@@ -48,12 +52,19 @@ export function parseRoomState(payload: unknown): RoomState {
 		throw new ApiError('Unexpected room response shape', 500);
 	}
 
+	const safeHostTimeMs = typeof hostTimeMs === 'number' ? hostTimeMs : 0;
+	const safeGuestTimeMs = typeof guestTimeMs === 'number' ? guestTimeMs : 0;
+	const safeEndReason = typeof endReason === 'string' ? endReason : null;
+
 	return {
 		roomId,
 		hostName,
 		guestName,
 		turn,
 		status,
-		fen
+		fen,
+		hostTimeMs: safeHostTimeMs,
+		guestTimeMs: safeGuestTimeMs,
+		endReason: safeEndReason
 	};
 }

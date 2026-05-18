@@ -21,7 +21,7 @@ public class GameController {
     public RoomStateResponse createRoom(@RequestParam(required = false) String hostName, Principal principal) {
         String resolvedHost = resolvePlayerName(hostName, principal);
         Room room = roomService.createRoom(resolvedHost);
-        return RoomStateResponse.from(room);
+        return RoomStateResponse.from(room, roomService);
     }
 
     @PostMapping("/api/room/{roomId}/join")
@@ -30,19 +30,19 @@ public class GameController {
             Principal principal) {
         String resolvedPlayer = resolvePlayerName(playerName, principal);
         Room room = roomService.joinRoom(roomId, resolvedPlayer);
-        return RoomStateResponse.from(room);
+        return RoomStateResponse.from(room, roomService);
     }
 
     @GetMapping("/api/room/{roomId}")
     public RoomStateResponse getRoom(@PathVariable String roomId) {
         Room room = roomService.getRoom(roomId);
-        return RoomStateResponse.from(room);
+        return RoomStateResponse.from(room, roomService);
     }
 
     @PostMapping("/api/room/{roomId}/start")
     public RoomStateResponse startRoom(@PathVariable String roomId) {
         Room room = roomService.startRoom(roomId);
-        return RoomStateResponse.from(room);
+        return RoomStateResponse.from(room, roomService);
     }
 
     public record MoveRequest(String move) {
@@ -55,7 +55,7 @@ public class GameController {
             Principal principal) {
 
         Room room = roomService.applyMove(roomId, payload.move());
-        return RoomStateResponse.from(room);
+        return RoomStateResponse.from(room, roomService);
     }
 
     private String resolvePlayerName(String providedName, Principal principal) {
@@ -88,15 +88,22 @@ public class GameController {
             String guestName,
             String turn,
             String status,
-            String fen) {
-        private static RoomStateResponse from(Room room) {
+            String fen,
+            long hostTimeMs,
+            long guestTimeMs,
+            String endReason) {
+        private static RoomStateResponse from(Room room, RoomService roomService) {
+            RoomService.ClockView clock = roomService.computeClockView(room);
             return new RoomStateResponse(
                     room.getRoomId(),
                     room.getHostName(),
                     room.getGuestName(),
                     room.getTurn().name(),
                     room.getStatus().name(),
-                    room.getFen());
+                    room.getFen(),
+                    clock.hostRemainingMs(),
+                    clock.guestRemainingMs(),
+                    room.getEndReason() == null ? null : room.getEndReason().name());
         }
     }
 

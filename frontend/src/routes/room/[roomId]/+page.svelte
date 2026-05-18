@@ -8,6 +8,7 @@
 
 	let board: any = null;
 	let game: any = null;
+	let notice = '';
 
 	$: room = $gameStore.room;
 	$: currentPlayerName = resolveDisplayName($authStore);
@@ -84,6 +85,41 @@
 		board.position(nextRoom.fen, true);
 	}
 
+	function formatMs(ms: number): string {
+		const safe = Number.isFinite(ms) ? Math.max(0, Math.floor(ms)) : 0;
+		const totalSeconds = Math.floor(safe / 1000);
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
+		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+	}
+
+	function updateNotice(activeRoom: RoomState | null) {
+		if (!activeRoom || !game) {
+			notice = '';
+			return;
+		}
+
+		if (activeRoom.endReason === 'TIMEOUT_HOST') {
+			notice = 'Het gio: HOST thua';
+			return;
+		}
+		if (activeRoom.endReason === 'TIMEOUT_GUEST') {
+			notice = 'Het gio: GUEST thua';
+			return;
+		}
+
+		if (typeof game.in_checkmate === 'function' && game.in_checkmate()) {
+			notice = 'Chieu het (checkmate)!';
+			return;
+		}
+		if (typeof game.in_draw === 'function' && game.in_draw()) {
+			notice = 'Hoa (draw).';
+			return;
+		}
+
+		notice = '';
+	}
+
 	async function setupRoom(roomId: string) {
 		const initialRoom = await gameStore.loadRoom(roomId);
 		if (!initialRoom?.fen) {
@@ -101,7 +137,10 @@
 		await gameStore.startRoomSync(roomId);
 		const unsubscribe = gameStore.subscribe((state) => {
 			applyRoomToBoard(state.room);
+			updateNotice(state.room);
 		});
+
+		updateNotice(initialRoom);
 
 		return unsubscribe;
 	}
@@ -142,6 +181,16 @@
 	<p class="error">{$gameStore.error}</p>
 {/if}
 
+{#if notice}
+	<p class="notice">{notice}</p>
+{/if}
+
+{#if room}
+	<p class="clock">
+		HOST: {formatMs(room.hostTimeMs)} | GUEST: {formatMs(room.guestTimeMs)}
+	</p>
+{/if}
+
 <p class="status">
 	{#if room}
 		Phong: {room.roomId} | Trang thai: {room.status} | Luot: {room.turn} | Che do: {room.guestName ===
@@ -165,6 +214,18 @@
 
 	.status {
 		margin-top: 0.5rem;
+		font-size: 0.95rem;
+		color: #334155;
+	}
+
+	.notice {
+		margin: 0.5rem 0;
+		font-weight: 600;
+		color: #0f172a;
+	}
+
+	.clock {
+		margin: 0.25rem 0;
 		font-size: 0.95rem;
 		color: #334155;
 	}
