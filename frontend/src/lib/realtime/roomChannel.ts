@@ -1,9 +1,7 @@
-import { getRoom } from '$lib/api/room';
-import type { RoomState } from '$lib/types/game';
+import { parseRoomState, type RoomState } from '$lib/types/game';
 
 interface RoomChannelOptions {
 	roomId: string;
-	intervalMs?: number;
 	onState: (room: RoomState) => void;
 	onError: (error: unknown) => void;
 }
@@ -13,37 +11,39 @@ export interface RoomChannel {
 	stop: () => void;
 }
 
+/**
+ * Subscribes to a room's Server-Sent Events stream. The browser's EventSource
+ * delivers the current state on connect and on every server-side change, and
+ * transparently reconnects if the connection drops — so there is no polling.
+ */
 export function createRoomChannel(options: RoomChannelOptions): RoomChannel {
-	const intervalMs = options.intervalMs ?? 500;
-	let timer: ReturnType<typeof setInterval> | undefined;
-	let active = false;
-
-	async function sync() {
-		try {
-			const next = await getRoom(options.roomId);
-			options.onState(next);
-		} catch (error) {
-			options.onError(error);
-		}
-	}
+	let source: EventSource | undefined;
 
 	return {
 		start: async () => {
-			if (active) {
+			if (source) {
 				return;
 			}
-			active = true;
-			await sync();
-			timer = setInterval(() => {
-				void sync();
-			}, intervalMs);
+
+			source = new EventSource(`/api/room/${encodeURIComponent(options.roomId)}/events`);
+
+			source.onmessage = (event) => {
+				try {
+					options.onState(parseRoomState(JSON.parse(event.data)));
+				} catch (error) {
+					options.onError(error);
+				}
+			};
+
+			// EventSource auto-reconnects after an error, so keep the stream open and
+			// just surface the hiccup rather than tearing it down.
+			source.onerror = (error) => {
+				options.onError(error);
+			};
 		},
 		stop: () => {
-			active = false;
-			if (timer) {
-				clearInterval(timer);
-				timer = undefined;
-			}
+			source?.close();
+			source = undefined;
 		}
 	};
 }

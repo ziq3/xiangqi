@@ -1,10 +1,14 @@
 package com.xiangqi.game.controller;
 
+import com.xiangqi.game.dto.RoomStateResponse;
 import com.xiangqi.game.model.Room;
+import com.xiangqi.game.service.RoomEventService;
 import com.xiangqi.game.service.RoomService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.security.Principal;
@@ -12,9 +16,11 @@ import java.security.Principal;
 @RestController
 public class GameController {
     RoomService roomService;
+    RoomEventService roomEventService;
 
-    public GameController(RoomService roomService) {
+    public GameController(RoomService roomService, RoomEventService roomEventService) {
         this.roomService = roomService;
+        this.roomEventService = roomEventService;
     }
 
     @PostMapping("/api/room/create")
@@ -30,7 +36,7 @@ public class GameController {
             Principal principal) {
         String resolvedPlayer = resolvePlayerName(playerName, principal);
         Room room = roomService.joinRoom(roomId, resolvedPlayer);
-        return RoomStateResponse.from(room, roomService);
+        return broadcast(room);
     }
 
     @GetMapping("/api/room/{roomId}")
@@ -39,10 +45,20 @@ public class GameController {
         return RoomStateResponse.from(room, roomService);
     }
 
+    /**
+     * Server-Sent Events stream of room state. Replaces client-side polling:
+     * clients receive the current state on connect, then on every change and on
+     * the server heartbeat.
+     */
+    @GetMapping(value = "/api/room/{roomId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamRoom(@PathVariable String roomId) {
+        return roomEventService.subscribe(roomId);
+    }
+
     @PostMapping("/api/room/{roomId}/start")
     public RoomStateResponse startRoom(@PathVariable String roomId) {
         Room room = roomService.startRoom(roomId);
-        return RoomStateResponse.from(room, roomService);
+        return broadcast(room);
     }
 
     public record MoveRequest(String move) {
@@ -55,7 +71,14 @@ public class GameController {
             Principal principal) {
 
         Room room = roomService.applyMove(roomId, payload.move());
-        return RoomStateResponse.from(room, roomService);
+        return broadcast(room);
+    }
+
+    /** Builds the response and pushes it to every SSE subscriber of the room. */
+    private RoomStateResponse broadcast(Room room) {
+        RoomStateResponse state = RoomStateResponse.from(room, roomService);
+        roomEventService.publish(room.getRoomId(), state);
+        return state;
     }
 
     private String resolvePlayerName(String providedName, Principal principal) {
@@ -80,31 +103,6 @@ public class GameController {
 
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
                 "You must be logged in or provide a guest name to play");
-    }
-
-    private record RoomStateResponse(
-            String roomId,
-            String hostName,
-            String guestName,
-            String turn,
-            String status,
-            String fen,
-            long hostTimeMs,
-            long guestTimeMs,
-            String endReason) {
-        private static RoomStateResponse from(Room room, RoomService roomService) {
-            RoomService.ClockView clock = roomService.computeClockView(room);
-            return new RoomStateResponse(
-                    room.getRoomId(),
-                    room.getHostName(),
-                    room.getGuestName(),
-                    room.getTurn().name(),
-                    room.getStatus().name(),
-                    room.getFen(),
-                    clock.hostRemainingMs(),
-                    clock.guestRemainingMs(),
-                    room.getEndReason() == null ? null : room.getEndReason().name());
-        }
     }
 
 }
