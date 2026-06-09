@@ -42,3 +42,7 @@
         {loading ? 'Logging in...' : 'Login'}
     </button>
 </form>
+
+<div style="margin-top: 1rem;">
+    <a href="/forgot-password" style="text-decoration: none; color: #3b82f6;">Quên mật khẩu?</a>
+</div>
