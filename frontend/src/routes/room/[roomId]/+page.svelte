@@ -9,9 +9,76 @@
 	let board: any = null;
 	let game: any = null;
 	let notice = '';
+	
+	let historyMoves: string[] = [];
+	let historyFens: string[] = [];
+	let viewMoveIndex = -1;
 
 	$: room = $gameStore.room;
 	$: currentPlayerName = resolveDisplayName($authStore);
+
+	let copiedId = false;
+	let copiedLink = false;
+
+	function copyRoomId() {
+		navigator.clipboard.writeText(roomId).then(() => {
+			copiedId = true;
+			setTimeout(() => (copiedId = false), 2000);
+		});
+	}
+
+	function copyRoomLink() {
+		if (typeof window !== 'undefined') {
+			navigator.clipboard.writeText(window.location.href).then(() => {
+				copiedLink = true;
+				setTimeout(() => (copiedLink = false), 2000);
+			});
+		}
+	}
+
+	// Reactively compute the FEN at each move index from moveHistory
+	$: {
+		if (room) {
+			const rawHistory = room.moveHistory ? room.moveHistory.trim() : '';
+			const moves = rawHistory ? rawHistory.split(/\s+/) : [];
+			if (moves.join(' ') !== historyMoves.join(' ')) {
+				const wasAtLatest = viewMoveIndex === -1 || viewMoveIndex === historyFens.length - 1;
+				historyMoves = moves;
+				const tempGame = new Xiangqi();
+				const startFen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
+				tempGame.load(startFen);
+				const fens = [startFen];
+				for (const m of moves) {
+					if (m.length === 4) {
+						const from = m.substring(0, 2);
+						const to = m.substring(2, 4);
+						tempGame.move({ from, to });
+						fens.push(tempGame.fen());
+					}
+				}
+				historyFens = fens;
+				// If we are at the latest or game is not playing, snap to the latest move
+				if (wasAtLatest || room.status !== 'PLAYING') {
+					viewMoveIndex = fens.length - 1;
+				}
+			}
+		} else {
+			historyMoves = [];
+			historyFens = [];
+			viewMoveIndex = -1;
+		}
+	}
+
+	// Reactively update the board and local game engine when viewMoveIndex changes
+	$: {
+		if (board && game && viewMoveIndex >= 0 && viewMoveIndex < historyFens.length) {
+			const targetFen = historyFens[viewMoveIndex];
+			if (game.fen().split(' ')[0] !== targetFen.split(' ')[0]) {
+				game.load(targetFen);
+				board.position(targetFen, true);
+			}
+		}
+	}
 
 	async function startGame() {
 		if (!roomId) return;
@@ -20,6 +87,7 @@
 
 	function isMyTurn(activeRoom: RoomState | null): boolean {
 		if (!activeRoom || activeRoom.status !== 'PLAYING') return false;
+		if (viewMoveIndex !== historyFens.length - 1) return false;
 		const isHost = activeRoom.hostName === currentPlayerName;
 		const isGuest = activeRoom.guestName === currentPlayerName;
 		return (isHost && activeRoom.turn === 'HOST') || (isGuest && activeRoom.turn === 'GUEST');
@@ -45,7 +113,9 @@
 		if (move === null) return 'snapback';
 
 		const currentFen = game.fen() || window.Xiangqiboard.objToFen(newPos);
-		gameStore.submitMove(roomId, currentFen).catch(() => {
+		const moveNotation = move.from + move.to;
+		const isCheckmate = typeof game.in_checkmate === 'function' && game.in_checkmate();
+		gameStore.submitMove(roomId, currentFen, moveNotation, isCheckmate).catch(() => {
 			rollbackToServerFen();
 		});
 	}
@@ -76,6 +146,12 @@
 
 	function applyRoomToBoard(nextRoom: RoomState | null) {
 		if (!board || !game || !nextRoom?.fen) return;
+
+		// Only apply the server FEN to the board/game if we are viewing the latest move
+		const isAtLatest = viewMoveIndex === historyFens.length - 1;
+		if (!isAtLatest) {
+			return;
+		}
 
 		if (game.fen().split(' ')[0] === nextRoom.fen.split(' ')[0]) {
 			return;
@@ -179,7 +255,37 @@
 <div class="play-page">
 	<!-- Board column -->
 	<div class="board-col">
-		<div id="myBoard"></div>
+		<div class="board-container">
+			<div id="myBoard"></div>
+			
+			<!-- Replay Navigation Controls -->
+			<div class="board-nav">
+				<button class="btn btn-nav" on:click={() => viewMoveIndex = 0} disabled={viewMoveIndex <= 0} title="Bắt đầu ván">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<polygon points="11 19 2 12 11 5 11 19"></polygon>
+						<polygon points="22 19 13 12 22 5 22 19"></polygon>
+					</svg>
+				</button>
+				<button class="btn btn-nav" on:click={() => viewMoveIndex = Math.max(0, viewMoveIndex - 1)} disabled={viewMoveIndex <= 0} title="Lùi 1 nước">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<polygon points="19 20 9 12 19 4 19 20"></polygon>
+						<line x1="5" y1="19" x2="5" y2="5"></line>
+					</svg>
+				</button>
+				<button class="btn btn-nav" on:click={() => viewMoveIndex = Math.min(historyFens.length - 1, viewMoveIndex + 1)} disabled={viewMoveIndex >= historyFens.length - 1} title="Tiến 1 nước">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<polygon points="5 4 15 12 5 20 5 4"></polygon>
+						<line x1="19" y1="5" x2="19" y2="19"></line>
+					</svg>
+				</button>
+				<button class="btn btn-nav" on:click={() => viewMoveIndex = historyFens.length - 1} disabled={viewMoveIndex >= historyFens.length - 1} title="Nước mới nhất">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<polygon points="13 5 22 12 13 19 13 5"></polygon>
+						<polygon points="2 5 11 12 2 19 2 5"></polygon>
+					</svg>
+				</button>
+			</div>
+		</div>
 	</div>
 
 	<!-- Info panel -->
@@ -193,7 +299,9 @@
 		<!-- Mode tag -->
 		{#if room}
 			<div class="mode-tag">
-				{#if isBotMode}
+				{#if isWaiting && isBotMode}
+					<span class="mode-dot mode-dot--waiting"></span> Chờ bạn chơi...
+				{:else if isBotMode}
 					<span class="mode-dot mode-dot--bot"></span> Vs BOT
 				{:else}
 					<span class="mode-dot mode-dot--human"></span> Vs người chơi
@@ -230,6 +338,42 @@
 					</div>
 				</div>
 			</div>
+
+			<!-- Moves history list -->
+			{#if historyMoves.length > 0}
+				<div class="moves-block">
+					<h3 class="moves-title">Lịch sử nước đi</h3>
+					<div class="moves-grid-scroll">
+						<div class="moves-grid">
+							{#each Array(Math.ceil(historyMoves.length / 2)) as _, index}
+								{@const hostMove = historyMoves[index * 2]}
+								{@const guestMove = historyMoves[index * 2 + 1]}
+								<div class="move-pair-row">
+									<span class="move-number">{index + 1}.</span>
+									<button 
+										class="move-btn" 
+										class:move-btn--active={viewMoveIndex === index * 2 + 1}
+										on:click={() => viewMoveIndex = index * 2 + 1}
+									>
+										{hostMove}
+									</button>
+									{#if guestMove}
+										<button 
+											class="move-btn" 
+											class:move-btn--active={viewMoveIndex === index * 2 + 2}
+											on:click={() => viewMoveIndex = index * 2 + 2}
+										>
+											{guestMove}
+										</button>
+									{:else}
+										<span class="move-btn move-btn--empty">...</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+				</div>
+			{/if}
 		{:else}
 			<div class="loading-block">
 				<span class="spinner"></span>
@@ -267,25 +411,42 @@
 			</div>
 		{/if}
 
+		<!-- Invite Box -->
+		{#if isWaiting}
+			<div class="invite-box">
+				<h4 class="invite-box-title">Mời bạn chơi</h4>
+				<p class="invite-box-desc">Gửi mã phòng hoặc liên kết này cho bạn bè để bắt đầu chơi:</p>
+				
+				<div class="invite-field">
+					<span class="invite-field-label">Mã phòng</span>
+					<div class="invite-copy-row">
+						<code class="invite-code">{roomId}</code>
+						<button class="btn-copy" on:click={copyRoomId}>
+							{copiedId ? 'Đã chép' : 'Sao chép'}
+						</button>
+					</div>
+				</div>
+
+				<div class="invite-field">
+					<span class="invite-field-label">Liên kết phòng</span>
+					<div class="invite-copy-row">
+						<span class="invite-link-preview">{typeof window !== 'undefined' ? window.location.origin + '/room/' + roomId : ''}</span>
+						<button class="btn-copy" on:click={copyRoomLink}>
+							{copiedLink ? 'Đã chép' : 'Sao chép'}
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Start button -->
 		{#if isWaiting && isHost}
 			<button id="start-game-btn" class="btn btn-primary start-btn" on:click={startGame}>
 				<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 					<polygon points="5 3 19 12 5 21 5 3"/>
 				</svg>
-				Bắt đầu chơi
+				Chơi với BOT ngay
 			</button>
-		{/if}
-
-		<!-- Invite hint -->
-		{#if isBotMode && isWaiting}
-			<p class="invite-hint">
-				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-					<line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-				</svg>
-				Chia sẻ ID phòng để mời bạn bè thay thế BOT
-			</p>
 		{/if}
 	</aside>
 </div>
@@ -311,17 +472,134 @@
 		min-width: 0;
 	}
 
-	/*
-	  Board is 9 cols × 10 rows → aspect ratio width:height = 9:10 = 0.9
-	  Available height = 100dvh - 60px (topbar) - 2rem (vertical padding)
-	  Board width from height = available_height × 0.9
-	  Also cap at available horizontal space = 100vw - 260px (panel) - 4.5rem (gap + h-padding)
-	*/
-	:global(#myBoard) {
+	.board-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
 		width: min(
-			calc((100dvh - 60px - 2rem) * 0.9),
+			calc((100dvh - 60px - 2rem - 60px) * 0.9),
 			calc(100vw - 260px - 4.5rem)
-		) !important;
+		);
+	}
+
+	:global(#myBoard) {
+		width: 100% !important;
+	}
+
+	.board-nav {
+		display: flex;
+		justify-content: space-around;
+		gap: 0.5rem;
+		width: 100%;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: 0.4rem;
+		box-sizing: border-box;
+	}
+
+	.btn-nav {
+		flex: 1;
+		max-width: 60px;
+		padding: 0.4rem;
+		background: transparent;
+		color: var(--text-secondary);
+		border: 1px solid transparent;
+		transition: all 0.15s var(--ease);
+	}
+
+	.btn-nav:hover:not(:disabled) {
+		background: var(--bg-raised);
+		color: var(--gold-light);
+		border-color: var(--border-light);
+	}
+
+	.btn-nav:disabled {
+		opacity: 0.25;
+		cursor: not-allowed;
+	}
+
+	/* ── Moves Log ── */
+	.moves-block {
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		padding: 0.85rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		max-height: 250px;
+		min-height: 140px;
+	}
+
+	.moves-title {
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-secondary);
+		border-bottom: 1px solid var(--border);
+		padding-bottom: 0.4rem;
+		margin: 0;
+	}
+
+	.moves-grid-scroll {
+		overflow-y: auto;
+		flex: 1;
+		padding-right: 2px;
+	}
+
+	.moves-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.move-pair-row {
+		display: grid;
+		grid-template-columns: 32px 1fr 1fr;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.82rem;
+	}
+
+	.move-number {
+		color: var(--text-muted);
+		font-weight: 600;
+		text-align: right;
+		padding-right: 0.25rem;
+	}
+
+	.move-btn {
+		background: transparent;
+		border: 1px solid transparent;
+		color: var(--text-secondary);
+		border-radius: var(--radius-sm);
+		padding: 0.25rem 0.4rem;
+		text-align: left;
+		cursor: pointer;
+		font-family: 'Courier New', monospace;
+		font-weight: 600;
+		font-size: 0.85rem;
+		transition: all 0.1s var(--ease);
+	}
+
+	.move-btn:hover {
+		background: var(--bg-raised);
+		color: var(--text-primary);
+	}
+
+	.move-btn--active {
+		background: var(--accent-dim);
+		color: var(--accent-light);
+		border-color: var(--border-accent);
+	}
+
+	.move-btn--empty {
+		color: var(--text-muted);
+		cursor: default;
+		padding-left: 0.4rem;
 	}
 
 	/* ── Info panel ── */
@@ -533,19 +811,110 @@
 		margin-top: 0.25rem;
 	}
 
-	/* Invite hint */
-	.invite-hint {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		line-height: 1.4;
+	.mode-dot--waiting {
+		background: var(--gold-light);
+		box-shadow: 0 0 6px var(--gold-light);
+		animation: pulse 2s infinite;
 	}
 
-	.invite-hint svg {
+	@keyframes pulse {
+		0% { opacity: 0.4; }
+		50% { opacity: 1; }
+		100% { opacity: 0.4; }
+	}
+
+	/* Invite Box */
+	.invite-box {
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		padding: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-top: 0.5rem;
+	}
+
+	.invite-box-title {
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-secondary);
+		margin: 0;
+	}
+
+	.invite-box-desc {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		line-height: 1.4;
+		margin: 0;
+	}
+
+	.invite-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.invite-field-label {
+		font-size: 0.68rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+	}
+
+	.invite-copy-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		background: var(--bg-base);
+		border: 1px solid var(--border-light);
+		border-radius: var(--radius-md);
+		padding: 0.4rem 0.6rem;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.invite-code {
+		font-family: 'Courier New', monospace;
+		font-weight: 700;
+		color: var(--gold-light);
+		font-size: 0.85rem;
+	}
+
+	.invite-link-preview {
+		font-size: 0.75rem;
+		color: var(--text-secondary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.btn-copy {
+		background: var(--bg-raised);
+		border: 1px solid var(--border-light);
+		color: var(--text-secondary);
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0.25rem 0.5rem;
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition: all 0.15s var(--ease);
 		flex-shrink: 0;
-		margin-top: 1px;
+	}
+
+	.btn-copy:hover {
+		background: var(--bg-overlay);
+		color: var(--text-primary);
+		border-color: var(--border-accent);
+	}
+
+	.btn-copy:active {
+		transform: scale(0.95);
 	}
 
 	/* Loading */
@@ -574,8 +943,11 @@
 		.board-col {
 			height: auto;
 		}
+		.board-container {
+			width: min(90vw, 500px);
+		}
 		:global(#myBoard) {
-			width: min(90vw, 500px) !important;
+			width: 100% !important;
 		}
 		.info-panel {
 			height: auto;

@@ -12,6 +12,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.security.Principal;
+import java.util.List;
 
 @RestController
 public class GameController {
@@ -26,7 +27,11 @@ public class GameController {
     @PostMapping("/api/room/create")
     public RoomStateResponse createRoom(@RequestParam(required = false) String hostName, Principal principal) {
         String resolvedHost = resolvePlayerName(hostName, principal);
-        Room room = roomService.createRoom(resolvedHost);
+        String id = null;
+        if (principal instanceof JwtAuthenticationToken jwtToken) {
+            id = jwtToken.getName();
+        }
+        Room room = roomService.createRoom(resolvedHost, id);
         return RoomStateResponse.from(room, roomService);
     }
 
@@ -35,7 +40,11 @@ public class GameController {
             @RequestParam(required = false) String playerName,
             Principal principal) {
         String resolvedPlayer = resolvePlayerName(playerName, principal);
-        Room room = roomService.joinRoom(roomId, resolvedPlayer);
+        String id = null;
+        if (principal instanceof JwtAuthenticationToken jwtToken) {
+            id = jwtToken.getName();
+        }
+        Room room = roomService.joinRoom(roomId, resolvedPlayer,id);
         return broadcast(room);
     }
 
@@ -43,6 +52,14 @@ public class GameController {
     public RoomStateResponse getRoom(@PathVariable String roomId) {
         Room room = roomService.getRoom(roomId);
         return RoomStateResponse.from(room, roomService);
+    }
+
+    @GetMapping("/api/user/listmatch")
+    public List<RoomStateResponse> listMatch(Principal principal) {
+        return roomService.listMatch(principal.getName())
+                .stream()
+                .map(room -> RoomStateResponse.from(room, roomService))
+                .toList();
     }
 
     /**
@@ -61,7 +78,7 @@ public class GameController {
         return broadcast(room);
     }
 
-    public record MoveRequest(String move) {
+    public record MoveRequest(String fen, String move, Boolean checkmate) {
     }
 
     @PostMapping("/api/room/{roomId}/move")
@@ -70,7 +87,7 @@ public class GameController {
             @RequestBody MoveRequest payload,
             Principal principal) {
 
-        Room room = roomService.applyMove(roomId, payload.move());
+        Room room = roomService.applyMove(roomId, payload.fen(), payload.move(), Boolean.TRUE.equals(payload.checkmate()));
         return broadcast(room);
     }
 
@@ -86,15 +103,7 @@ public class GameController {
             java.util.Map<String, Object> userMetadata = (java.util.Map<String, Object>) jwtToken.getTokenAttributes()
                     .get("user_metadata");
 
-            if (userMetadata != null && userMetadata.containsKey("username")) {
-                return userMetadata.get("username").toString().trim();
-            }
-
-            if (jwtToken.getTokenAttributes().containsKey("email")) {
-                return jwtToken.getTokenAttributes().get("email").toString().trim();
-            }
-
-            return principal.getName().trim();
+            return userMetadata.get("username").toString().trim();
         }
 
         if (providedName != null && !providedName.isBlank()) {

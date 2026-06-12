@@ -14,6 +14,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class Room {
+
     public enum Turn {
         HOST,
         GUEST
@@ -25,10 +26,12 @@ public class Room {
         FINISHED
     }
 
-	public enum EndReason {
-		TIMEOUT_HOST,
-		TIMEOUT_GUEST
-	}
+    public enum EndReason {
+        TIMEOUT_HOST,
+        TIMEOUT_GUEST,
+        CHECKMATE_HOST,
+        CHECKMATE_GUEST
+    }
 
     @Id
     @Column(nullable = false, updatable = false, length = 8)
@@ -50,6 +53,9 @@ public class Room {
 
     @Column(nullable = false, length = 4096)
     private String fen;
+
+    @Column(length = 4096)
+    private String moveHistory;
 
     @Column(nullable = false)
     private long hostRemainingMs;
@@ -74,6 +80,10 @@ public class Room {
     @Column(length = 32)
     private EndReason endReason;
 
+    @Column(updatable = false, length = 36)
+    private String hostId; // Supabase UUID (sub claim)
+    @Column(length = 36)
+    private String guestId; // Supabase UUID (sub claim)
 
     public Room() {
         this.turn = Turn.HOST;
@@ -88,6 +98,7 @@ public class Room {
         this.guestRemainingMs = this.clockBaseMs;
         this.turnStartedAtEpochMs = 0L;
         this.endReason = null;
+        this.moveHistory = "";
     }
 
     public boolean canJoin() {

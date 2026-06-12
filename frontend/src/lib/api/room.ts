@@ -35,11 +35,19 @@ export async function startRoom(roomId: string): Promise<RoomState> {
 	return parseRoomState(response);
 }
 
-export async function updateRoomFen(roomId: string, fen: string): Promise<RoomState> {
+export async function updateRoomFen(roomId: string, fen: string, move: string, isCheckmate: boolean = false): Promise<RoomState> {
 	const response = await apiRequest<unknown>(`/api/room/${encodeURIComponent(roomId)}/move`, {
 		method: 'POST',
-		body: { move: fen }
+		body: { fen, move, checkmate: isCheckmate }
 	});
 
 	return parseRoomState(response);
+}
+
+export async function listMatches(): Promise<RoomState[]> {
+	const response = await apiRequest<unknown[]>('/api/user/listmatch');
+	if (!Array.isArray(response)) {
+		return [];
+	}
+	return response.map(parseRoomState);
 }

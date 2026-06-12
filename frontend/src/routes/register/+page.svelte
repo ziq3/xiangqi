@@ -2,17 +2,28 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
 
+	let username = '';
 	let email = '';
 	let password = '';
 	let errorMessage = '';
 	let loading = false;
 
 	async function handleRegister() {
+		if (!username.trim()) {
+			errorMessage = 'Vui lòng nhập tên người chơi';
+			return;
+		}
+
 		loading = true;
 		errorMessage = '';
 		const { data, error } = await supabase.auth.signUp({
 			email: email,
-			password: password
+			password: password,
+			options: {
+				data: {
+					username: username.trim()
+				}
+			}
 		});
 		if (error) {
 			errorMessage = error.message;
@@ -60,6 +71,19 @@
 			{/if}
 
 			<form on:submit|preventDefault={handleRegister} novalidate>
+				<div class="form-group">
+					<label class="form-label" for="reg-username">Tên người chơi</label>
+					<input
+						id="reg-username"
+						type="text"
+						class="form-input"
+						placeholder="Ví dụ: Lữ Bố, Gia Cát Lượng..."
+						bind:value={username}
+						required
+						autocomplete="username"
+					/>
+				</div>
+
 				<div class="form-group">
 					<label class="form-label" for="reg-email">Email</label>
 					<input

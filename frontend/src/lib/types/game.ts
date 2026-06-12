@@ -12,6 +12,7 @@ export interface RoomState {
 	hostTimeMs: number;
 	guestTimeMs: number;
 	endReason: string | null;
+	moveHistory: string;
 }
 
 export class ApiError extends Error {
@@ -38,7 +39,7 @@ export function parseRoomState(payload: unknown): RoomState {
 	}
 
 	const candidate = payload as Record<string, unknown>;
-	const { roomId, hostName, guestName, turn, status, fen, hostTimeMs, guestTimeMs, endReason } =
+	const { roomId, hostName, guestName, turn, status, fen, hostTimeMs, guestTimeMs, endReason, moveHistory } =
 		candidate;
 
 	if (
@@ -55,6 +56,7 @@ export function parseRoomState(payload: unknown): RoomState {
 	const safeHostTimeMs = typeof hostTimeMs === 'number' ? hostTimeMs : 0;
 	const safeGuestTimeMs = typeof guestTimeMs === 'number' ? guestTimeMs : 0;
 	const safeEndReason = typeof endReason === 'string' ? endReason : null;
+	const safeMoveHistory = typeof moveHistory === 'string' ? moveHistory : '';
 
 	return {
 		roomId,
@@ -65,6 +67,7 @@ export function parseRoomState(payload: unknown): RoomState {
 		fen,
 		hostTimeMs: safeHostTimeMs,
 		guestTimeMs: safeGuestTimeMs,
-		endReason: safeEndReason
+		endReason: safeEndReason,
+		moveHistory: safeMoveHistory
 	};
 }

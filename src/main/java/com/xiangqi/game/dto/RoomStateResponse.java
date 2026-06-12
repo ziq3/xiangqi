@@ -16,7 +16,8 @@ public record RoomStateResponse(
         String fen,
         long hostTimeMs,
         long guestTimeMs,
-        String endReason) {
+        String endReason,
+        String moveHistory) {
 
     public static RoomStateResponse from(Room room, RoomService roomService) {
         RoomService.ClockView clock = roomService.computeClockView(room);
@@ -29,6 +30,7 @@ public record RoomStateResponse(
                 room.getFen(),
                 clock.hostRemainingMs(),
                 clock.guestRemainingMs(),
-                room.getEndReason() == null ? null : room.getEndReason().name());
+                room.getEndReason() == null ? null : room.getEndReason().name(),
+                room.getMoveHistory());
     }
 }

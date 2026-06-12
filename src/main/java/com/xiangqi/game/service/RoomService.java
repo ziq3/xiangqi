@@ -1,6 +1,7 @@
 package com.xiangqi.game.service;
 
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.Locale;
 
 import com.xiangqi.game.model.Room.EndReason;
@@ -64,9 +65,9 @@ public class RoomService {
     return new ClockView(Math.max(0L, hostMs), Math.max(0L, guestMs));
   }
 
-	public ClockView computeClockView(Room room) {
-		return computeClockView(room, nowMs());
-	}
+  public ClockView computeClockView(Room room) {
+    return computeClockView(room, nowMs());
+  }
 
   private boolean isTimedOut(ClockView view, Turn turnToMove) {
     return turnToMove == Turn.HOST ? view.hostRemainingMs() <= 0L : view.guestRemainingMs() <= 0L;
@@ -113,26 +114,29 @@ public class RoomService {
   }
 
   @Transactional
-  public Room createRoom(String hostName) {
+  public Room createRoom(String hostName, String id) {
 
     Room room = new Room();
     room.setRoomId(generateRoomId());
     room.setHostName(hostName);
-
+    room.setHostId(id);
     return roomRepository.save(room);
   }
 
   @Transactional
-  public Room joinRoom(String roomId, String guestName) {
+  public Room joinRoom(String roomId, String guestName, String id) {
     Room room = getRoomForUpdate(roomId);
 
     if (!room.canJoin()) {
       throw new IllegalStateException("Room is full");
     }
-    if (!guestName.equals(room.getHostName())) {
+    if (id == null || !id.equals(room.getHostId())) {
       room.setGuestName(guestName);
+      if (id != null) {
+        room.setGuestId(id);
+      }
       room.setStatus(Status.PLAYING);
-		ensureClockStarted(room, nowMs());
+      ensureClockStarted(room, nowMs());
     }
     return room;
   }
@@ -142,13 +146,13 @@ public class RoomService {
     Room room = getRoomForUpdate(roomId);
     if (room.getStatus() == Status.WAITING) {
       room.setStatus(Status.PLAYING);
-		ensureClockStarted(room, nowMs());
+      ensureClockStarted(room, nowMs());
     }
     return room;
   }
 
   @Transactional
-  public Room applyMove(String roomId,String fen) {
+  public Room applyMove(String roomId, String fen, String move, boolean isCheckmate) {
     Room room = getRoomForUpdate(roomId);
     long now = nowMs();
     ensureClockStarted(room, now);
@@ -157,6 +161,8 @@ public class RoomService {
       return room;
     }
 
+    room.setMoveHistory(room.getMoveHistory() + " " + move);
+
     Turn mover = room.getTurn();
     room.setFen(fen);
     boolean hostTurn = room.getTurn() == Turn.HOST;
@@ -164,24 +170,30 @@ public class RoomService {
     addIncrement(room, mover);
     room.setTurnStartedAtEpochMs(now);
 
+    if (isCheckmate) {
+      room.setStatus(Status.FINISHED);
+      room.setEndReason(hostTurn ? EndReason.CHECKMATE_HOST : EndReason.CHECKMATE_GUEST);
+      room.setTurnStartedAtEpochMs(0L);
+      return room;
+    }
+
     if ("BOT".equals(room.getGuestName())) {
       applyElapsedForTurn(room, now);
       if (room.getStatus() != Status.PLAYING) {
         return room;
       }
       Turn botMover = room.getTurn();
-        String newFen = engineService.getFenAfterBestMove(fen);
-        if (newFen != null) {
-            room.setFen(newFen);
+      String newFen = engineService.getFenAfterBestMove(fen);
+      if (newFen != null) {
+        room.setFen(newFen);
         boolean botWasHostTurn = botMover == Turn.HOST;
         room.setTurn(botWasHostTurn ? Turn.GUEST : Turn.HOST);
         addIncrement(room, botMover);
         room.setTurnStartedAtEpochMs(now);
-        }
+      }
     }
     return room;
   }
-
 
   @Transactional
   public Room getRoom(String roomId) {
@@ -202,7 +214,6 @@ public class RoomService {
 
     return room;
   }
-
 
   private Room getRoomForUpdate(String roomId) {
     return roomRepository.findByRoomIdForUpdate(normalizeRoomId(roomId))
@@ -227,5 +238,9 @@ public class RoomService {
       id = sb.toString();
     } while (roomRepository.existsById(id));
     return id;
+  }
+
+  public List<Room> listMatch(String userId) {
+    return roomRepository.findRoomByUserId(userId);
   }
 }

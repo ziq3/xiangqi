@@ -46,7 +46,7 @@ function createGameStore() {
 		}
 	}
 
-	async function submitMove(roomId: string, fen: string) {
+	async function submitMove(roomId: string, fen: string, move: string, isCheckmate: boolean = false) {
 		let previousFen = '';
 		update((current) => {
 			previousFen = current.room?.fen ?? '';
@@ -59,7 +59,7 @@ function createGameStore() {
 		});
 
 		try {
-			const room = await updateRoomFen(roomId, fen);
+			const room = await updateRoomFen(roomId, fen, move, isCheckmate);
 			update((current) => ({ ...current, room, pendingMove: false }));
 			return room;
 		} catch (error) {

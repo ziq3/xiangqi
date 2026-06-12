@@ -1,3 +1,4 @@
+import { supabase } from '$lib/supabaseClient';
 import { ApiError } from '$lib/types/game';
 
 interface RequestOptions {
@@ -7,10 +8,16 @@ interface RequestOptions {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+	// Supabase manages token storage and refresh automatically.
+	// If the user is logged in, attach the JWT so the Java backend can identify them.
+	const { data: sessionData } = await supabase.auth.getSession();
+	const accessToken = sessionData.session?.access_token;
+
 	const response = await fetch(path, {
 		method: options.method ?? 'GET',
 		headers: {
 			'Content-Type': 'application/json',
+			...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
 			...options.headers
 		},
 		body: options.body ? JSON.stringify(options.body) : undefined
