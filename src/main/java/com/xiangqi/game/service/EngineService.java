@@ -4,6 +4,9 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import com.xiangqi.game.dto.EngineAnalysis;
 
 import java.io.*;
 
@@ -15,6 +18,7 @@ public class EngineService {
     private final Process process;
     private final BufferedReader reader;
     private final BufferedWriter writer;
+    SseEmitter currentEmitter;
 
     public EngineService() {
         File exeFile = new File("engine/pikafish-bmi2.exe");
@@ -29,10 +33,60 @@ public class EngineService {
 
             reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+            new Thread(() -> {
+                try {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("info ")) {
+                            String[] parts = line.split(" ");
+                            Integer scoreCp = null;
+                            Integer mate = null;
+                            int depth = 0;
+                            String bestMove = null;
 
+                            for (int i = 0; i < parts.length; i++) {
+                                if (parts[i].equals("score") && i + 2 < parts.length) {
+                                    if (parts[i + 1].equals("cp")) {
+                                        try {
+                                            scoreCp = Integer.parseInt(parts[i + 2]);
+                                        } catch (Exception ignored) {
+                                        }
+                                    } else if (parts[i + 1].equals("mate")) {
+                                        try {
+                                            mate = Integer.parseInt(parts[i + 2]);
+                                        } catch (Exception ignored) {
+                                        }
+                                    }
+                                } else if (parts[i].equals("pv") && i + 1 < parts.length) {
+                                    bestMove = parts[i + 1]; // Just grab the very first move!
+                                    break; // We don't care about the rest of the line
+                                }
+                            }
+
+                            // Only send if we found the data we need
+                            if ((scoreCp != null || mate != null) && bestMove != null) {
+                                EngineAnalysis analysisObject = new EngineAnalysis(scoreCp, mate, bestMove);
+
+                                if (currentEmitter != null) {
+                                    try {
+                                        currentEmitter.send(SseEmitter.event().data(analysisObject));
+                                    } catch (IOException e) {
+                                        currentEmitter = null;
+                                        sendCommand("stop");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                } catch (IOException e) {
+                    logger.error("Engine read error", e);
+                }
+            }).start();
         } catch (IOException e) {
             throw new RuntimeException("Failed to start engine process", e);
         }
+
     }
 
     private void sendCommand(String command) throws IOException {
@@ -75,6 +129,40 @@ public class EngineService {
             logger.error("Error communicating with engine for FEN {}", fen, e);
         }
         return null;
+    }
+
+    public SseEmitter streamAnalysis(String fen) {
+        if (this.currentEmitter != null) {
+            this.currentEmitter.complete(); // close old connection
+        }
+
+        // 2. Create a new emitter (e.g., 0 means no timeout)
+        SseEmitter emitter = new SseEmitter(0L);
+        this.currentEmitter = emitter;
+
+        // 3. Handle client disconnects (when they close the browser or toggle off)
+        Runnable onDisconnect = () -> {
+            if (this.currentEmitter == emitter) {
+                this.currentEmitter = null;
+                try {
+                    sendCommand("stop");
+                } catch (Exception e) {
+                }
+            }
+        };
+
+        emitter.onCompletion(onDisconnect);
+        emitter.onTimeout(onDisconnect);
+        emitter.onError(e -> onDisconnect.run());
+        // 4. Send commands to engine
+        try {
+            sendCommand("stop"); // Ensure engine is idle
+            sendCommand("position fen " + fen);
+            sendCommand("go infinite"); // Tell engine to think forever
+        } catch (IOException e) {
+            emitter.completeWithError(e);
+        }
+        return emitter;
     }
 
     @PreDestroy

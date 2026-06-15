@@ -2,6 +2,7 @@ package com.xiangqi.game.controller;
 
 import com.xiangqi.game.dto.RoomStateResponse;
 import com.xiangqi.game.model.Room;
+import com.xiangqi.game.service.EngineService;
 import com.xiangqi.game.service.RoomEventService;
 import com.xiangqi.game.service.RoomService;
 import org.springframework.http.HttpStatus;
@@ -18,10 +19,12 @@ import java.util.List;
 public class GameController {
     RoomService roomService;
     RoomEventService roomEventService;
+    EngineService engineService;
 
-    public GameController(RoomService roomService, RoomEventService roomEventService) {
+    public GameController(RoomService roomService, RoomEventService roomEventService, EngineService engineService) {
         this.roomService = roomService;
         this.roomEventService = roomEventService;
+        this.engineService = engineService;
     }
 
     @PostMapping("/api/room/create")
@@ -44,7 +47,7 @@ public class GameController {
         if (principal instanceof JwtAuthenticationToken jwtToken) {
             id = jwtToken.getName();
         }
-        Room room = roomService.joinRoom(roomId, resolvedPlayer,id);
+        Room room = roomService.joinRoom(roomId, resolvedPlayer, id);
         return broadcast(room);
     }
 
@@ -87,8 +90,14 @@ public class GameController {
             @RequestBody MoveRequest payload,
             Principal principal) {
 
-        Room room = roomService.applyMove(roomId, payload.fen(), payload.move(), Boolean.TRUE.equals(payload.checkmate()));
+        Room room = roomService.applyMove(roomId, payload.fen(), payload.move(),
+                Boolean.TRUE.equals(payload.checkmate()));
         return broadcast(room);
+    }
+
+    @GetMapping(value = "/api/engine/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamEngine(@RequestParam String fen) {
+        return engineService.streamAnalysis(fen);
     }
 
     /** Builds the response and pushes it to every SSE subscriber of the room. */

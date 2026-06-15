@@ -13,7 +13,7 @@ public class SecurityConfig {
     http
         .csrf(csrf -> csrf.disable())
         .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/api/public/**", "/api/room/**").permitAll()
+            .requestMatchers("/api/public/**", "/api/room/**", "/api/engine/**").permitAll()
             .anyRequest().authenticated())
         .oauth2ResourceServer(oauth2 -> oauth2
             .jwt(org.springframework.security.config.Customizer.withDefaults()));

@@ -4,6 +4,8 @@
 	import { gameStore } from '$lib/stores/game';
 	import { authStore, resolveDisplayName } from '$lib/stores/auth';
 	import type { RoomState } from '$lib/types/game';
+	import { engineStore } from '$lib/stores/engine';
+
 	$: roomId = $page.params.roomId ?? '';
 
 	let board: any = null;
@@ -16,6 +18,7 @@
 
 	$: room = $gameStore.room;
 	$: currentPlayerName = resolveDisplayName($authStore);
+	$: analysisEnabled = $engineStore.enabled;
 
 	let copiedId = false;
 	let copiedLink = false;
@@ -69,6 +72,25 @@
 		}
 	}
 
+	function clearHighlight() {
+		if (typeof document !== 'undefined') {
+			document.querySelectorAll('.best-move-highlight').forEach(el => el.classList.remove('best-move-highlight'));
+		}
+	}
+
+	function applyHighlight(bestMove: string | null) {
+		clearHighlight();
+		if (!bestMove || bestMove.length < 4) return;
+		const from = bestMove.substring(0, 2);
+		const to = bestMove.substring(2, 4);
+		if (typeof document !== 'undefined') {
+			const fromSq = document.querySelector(`.square-${from}`);
+			const toSq = document.querySelector(`.square-${to}`);
+			if (fromSq) fromSq.classList.add('best-move-highlight');
+			if (toSq) toSq.classList.add('best-move-highlight');
+		}
+	}
+
 	// Reactively update the board and local game engine when viewMoveIndex changes
 	$: {
 		if (board && game && viewMoveIndex >= 0 && viewMoveIndex < historyFens.length) {
@@ -77,6 +99,21 @@
 				game.load(targetFen);
 				board.position(targetFen, true);
 			}
+			
+			if (analysisEnabled) {
+				engineStore.analyze(targetFen);
+			} else {
+				clearHighlight();
+			}
+		}
+	}
+
+	// Reactively apply highlights when analysis arrives from the realtime stream
+	$: {
+		if (analysisEnabled && $engineStore.analysis?.bestMove) {
+			applyHighlight($engineStore.analysis.bestMove);
+		} else if (!analysisEnabled) {
+			clearHighlight();
 		}
 	}
 
@@ -97,6 +134,31 @@
 		if (!room?.fen || !board || !game) return;
 		board.position(room.fen, false);
 		game.load(room.fen);
+	}
+
+	function getEvalPercentage(analysis: any): string {
+		if (!analysis) return '50%';
+		if (analysis.mate !== null && analysis.mate !== undefined) {
+			return analysis.mate > 0 ? '100%' : '0%';
+		}
+		if (analysis.scoreCp === undefined || analysis.scoreCp === null) return '50%';
+		// Sigmoid-like or clamped scale. Let's say +1000 cp is 100% red, -1000 is 100% black.
+		// A simple clamp:
+		const clamped = Math.max(-1000, Math.min(1000, analysis.scoreCp));
+		const percent = 50 + (clamped / 20);
+		return `${percent}%`;
+	}
+
+	function formatScore(analysis: any): string {
+		if (!analysis) return '';
+		if (analysis.mate !== null && analysis.mate !== undefined) {
+			return `M${Math.abs(analysis.mate)}`;
+		}
+		if (analysis.scoreCp !== null && analysis.scoreCp !== undefined) {
+			const val = analysis.scoreCp / 100;
+			return val > 0 ? `+${val.toFixed(2)}` : val.toFixed(2);
+		}
+		return '';
 	}
 
 	function onDrop(
@@ -234,6 +296,7 @@
 		return () => {
 			unsubscribeStore?.();
 			gameStore.stopRoomSync();
+			engineStore.stopAnalysis();
 			board?.destroy();
 			board = null;
 			game = null;
@@ -255,10 +318,26 @@
 <div class="play-page">
 	<!-- Board column -->
 	<div class="board-col">
-		<div class="board-container">
-			<div id="myBoard"></div>
+		<div class="board-container" class:with-eval={$engineStore.enabled}>
+			<div class="eval-and-board">
+				{#if $engineStore.enabled}
+					<div class="eval-bar">
+						<div class="eval-fill eval-fill-black" style="height: {100 - parseFloat(getEvalPercentage($engineStore.analysis))}%;"></div>
+						<div class="eval-fill eval-fill-red" style="height: {getEvalPercentage($engineStore.analysis)};"></div>
+						<div class="eval-score" class:eval-score-black={(parseFloat(getEvalPercentage($engineStore.analysis)) || 50) < 50}>
+							{#if $engineStore.loading}
+								<span class="spinner-small"></span>
+							{:else}
+								{formatScore($engineStore.analysis)}
+							{/if}
+						</div>
+					</div>
+				{/if}
+				<div id="myBoard"></div>
+			</div>
 			
 			<!-- Replay Navigation Controls -->
+
 			<div class="board-nav">
 				<button class="btn btn-nav" on:click={() => viewMoveIndex = 0} disabled={viewMoveIndex <= 0} title="Bắt đầu ván">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -284,6 +363,20 @@
 						<polygon points="2 5 11 12 2 19 2 5"></polygon>
 					</svg>
 				</button>
+				{#if isFinished || !isPlaying}
+					<div style="width: 1px; background: var(--border); margin: 0 4px;"></div>
+					<button 
+						class="btn btn-nav" 
+						class:btn-analyze-active={$engineStore.enabled}
+						on:click={() => engineStore.setEnabled(!$engineStore.enabled)}
+						title="Bật/tắt phân tích Engine"
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="12" cy="12" r="10"></circle>
+							<polyline points="12 6 12 12 16 14"></polyline>
+						</svg>
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -342,7 +435,9 @@
 			<!-- Moves history list -->
 			{#if historyMoves.length > 0}
 				<div class="moves-block">
-					<h3 class="moves-title">Lịch sử nước đi</h3>
+					<div class="moves-header">
+						<h3 class="moves-title">Lịch sử nước đi</h3>
+					</div>
 					<div class="moves-grid-scroll">
 						<div class="moves-grid">
 							{#each Array(Math.ceil(historyMoves.length / 2)) as _, index}
@@ -953,4 +1048,93 @@
 			height: auto;
 		}
 	}
+
+	/* Analysis Tools */
+	.eval-and-board {
+		display: flex;
+		gap: 8px;
+		width: 100%;
+		align-items: stretch;
+	}
+
+	.eval-bar {
+		width: 24px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		display: flex;
+		flex-direction: column;
+		position: relative;
+		overflow: hidden;
+		flex-shrink: 0;
+	}
+
+	.eval-fill {
+		width: 100%;
+		transition: height 0.3s ease-out;
+	}
+
+	.eval-fill-black {
+		background-color: #2c2c2c;
+	}
+
+	.eval-fill-red {
+		background-color: #d32f2f;
+	}
+
+	.eval-score {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		font-size: 0.65rem;
+		font-weight: 700;
+		color: #fff;
+		z-index: 2;
+		background: rgba(0, 0, 0, 0.4);
+		padding: 2px 4px;
+		border-radius: 4px;
+		pointer-events: none;
+	}
+
+	.eval-score-black {
+		color: #fff;
+	}
+
+	.moves-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		border-bottom: 1px solid var(--border);
+		padding-bottom: 0.4rem;
+		margin-bottom: 0.4rem;
+	}
+
+	.moves-title {
+		border-bottom: none;
+		padding-bottom: 0;
+		margin-bottom: 0;
+	}
+
+	.btn-analyze-active {
+		color: var(--accent-light) !important;
+		background: var(--accent-dim) !important;
+		border-color: var(--border-accent) !important;
+	}
+
+	.spinner-small {
+		display: inline-block;
+		width: 10px;
+		height: 10px;
+		border: 2px solid rgba(255,255,255,0.3);
+		border-radius: 50%;
+		border-top-color: #fff;
+		animation: spin 1s ease-in-out infinite;
+	}
+
+	:global(.best-move-highlight) {
+		background-color: rgba(50, 205, 50, 0.5) !important;
+		box-shadow: inset 0 0 10px rgba(50, 205, 50, 0.8) !important;
+	}
+
 </style>
