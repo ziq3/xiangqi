@@ -19,6 +19,9 @@
 		}
 
 		if (analysis.mate !== null && analysis.mate !== undefined) {
+			if (analysis.mate === 0) {
+				return isBlack ? '100%' : '0%';
+			}
 			const mateRelative = isBlack ? -analysis.mate : analysis.mate;
 			return mateRelative > 0 ? '100%' : '0%';
 		}
