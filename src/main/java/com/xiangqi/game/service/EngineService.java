@@ -109,7 +109,9 @@ public class EngineService {
         writer.flush();
     }
 
-    public String getFenAfterBestMove(String fen) {
+    public record EngineMoveResult(String fen, String move) {}
+
+    public EngineMoveResult getFenAfterBestMove(String fen) {
         try {
             sendCommand("position fen " + fen);
             sendCommand("go movetime " + 500);
@@ -133,7 +135,7 @@ public class EngineService {
 
                 while ((line = reader.readLine()) != null) {
                     if (line.startsWith("Fen: ")) {
-                        return line.substring(5).trim();
+                        return new EngineMoveResult(line.substring(5).trim(), bestMove);
                     }
                     if (line.startsWith("Checkers:")) {
                         break;

@@ -183,9 +183,15 @@ public class RoomService {
         return room;
       }
       Turn botMover = room.getTurn();
-      String newFen = engineService.getFenAfterBestMove(fen);
-      if (newFen != null) {
-        room.setFen(newFen);
+      EngineService.EngineMoveResult result = engineService.getFenAfterBestMove(fen);
+      if (result != null && result.fen() != null && result.move() != null) {
+        room.setFen(result.fen());
+        String currentHistory = room.getMoveHistory();
+        if (currentHistory == null || currentHistory.isBlank()) {
+          room.setMoveHistory(result.move());
+        } else {
+          room.setMoveHistory(currentHistory.trim() + " " + result.move());
+        }
         boolean botWasHostTurn = botMover == Turn.HOST;
         room.setTurn(botWasHostTurn ? Turn.GUEST : Turn.HOST);
         addIncrement(room, botMover);
