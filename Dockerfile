@@ -28,7 +28,7 @@ RUN chmod +x mvnw && ./mvnw clean package -DskipTests
 FROM eclipse-temurin:24-jre AS runner
 WORKDIR /app
 # Install curl for health checks (optional)
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl libatomic1 && rm -rf /var/lib/apt/lists/*
 # Copy the jar file from builder stage
 COPY --from=backend-builder /app/target/*.jar app.jar
 # Copy the engine folder (which contains the executables and pikafish.nnue)
