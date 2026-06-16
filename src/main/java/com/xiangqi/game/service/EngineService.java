@@ -82,11 +82,20 @@ public class EngineService {
                                     }
                                 }
                             }
+                        } else {
+                            logger.info("Engine output: {}", line);
                         }
                     }
 
                 } catch (IOException e) {
                     logger.error("Engine read error", e);
+                } finally {
+                    try {
+                        int exitVal = process.exitValue();
+                        logger.warn("Engine process exited with code: {}", exitVal);
+                    } catch (IllegalThreadStateException e) {
+                        // Process is still running
+                    }
                 }
             }).start();
         } catch (IOException e) {
