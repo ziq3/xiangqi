@@ -2,36 +2,59 @@
 	interface Props {
 		analysis: any;
 		loading: boolean;
+		fen?: string;
 	}
 
-	let { analysis, loading }: Props = $props();
+	let { analysis, loading, fen = '' }: Props = $props();
 
-	function getEvalPercentage(analysis: any): string {
+	function getEvalPercentage(analysis: any, fenStr: string): string {
 		if (!analysis) return '50%';
+
+		let isBlack = false;
+		if (fenStr) {
+			const tokens = fenStr.trim().split(/\s+/);
+			if (tokens.length >= 2) {
+				isBlack = tokens[1] === 'b';
+			}
+		}
+
 		if (analysis.mate !== null && analysis.mate !== undefined) {
-			return analysis.mate > 0 ? '100%' : '0%';
+			const mateRelative = isBlack ? -analysis.mate : analysis.mate;
+			return mateRelative > 0 ? '100%' : '0%';
 		}
 		if (analysis.scoreCp === undefined || analysis.scoreCp === null) return '50%';
-		const clamped = Math.max(-1000, Math.min(1000, analysis.scoreCp));
+
+		const scoreRelative = isBlack ? -analysis.scoreCp : analysis.scoreCp;
+		const clamped = Math.max(-1000, Math.min(1000, scoreRelative));
 		const percent = 50 + (clamped / 20);
 		return `${percent}%`;
 	}
 
-	function formatScore(analysis: any): string {
+	function formatScore(analysis: any, fenStr: string): string {
 		if (!analysis) return '';
+
+		let isBlack = false;
+		if (fenStr) {
+			const tokens = fenStr.trim().split(/\s+/);
+			if (tokens.length >= 2) {
+				isBlack = tokens[1] === 'b';
+			}
+		}
+
 		if (analysis.mate !== null && analysis.mate !== undefined) {
 			return `M${Math.abs(analysis.mate)}`;
 		}
 		if (analysis.scoreCp !== null && analysis.scoreCp !== undefined) {
-			const val = analysis.scoreCp / 100;
+			const scoreRelative = isBlack ? -analysis.scoreCp : analysis.scoreCp;
+			const val = scoreRelative / 100;
 			return val > 0 ? `+${val.toFixed(2)}` : val.toFixed(2);
 		}
 		return '';
 	}
 
-	let evalPercentageStr = $derived(getEvalPercentage(analysis));
+	let evalPercentageStr = $derived(getEvalPercentage(analysis, fen));
 	let isBlackFavored = $derived((parseFloat(evalPercentageStr) || 50) < 50);
-	let scoreText = $derived(formatScore(analysis));
+	let scoreText = $derived(formatScore(analysis, fen));
 </script>
 
 <div class="eval-bar">

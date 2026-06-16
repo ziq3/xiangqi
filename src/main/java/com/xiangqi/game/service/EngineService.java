@@ -81,9 +81,6 @@ public class EngineService {
                                         sendCommand("stop");
                                     }
                                 }
-                            }
-                        } else {
-                            logger.info("Engine output: {}", line);
                         }
                     }
 

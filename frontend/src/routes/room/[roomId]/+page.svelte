@@ -309,7 +309,7 @@
 		<div class="board-container" class:with-eval={$engineStore.enabled}>
 			<div class="eval-and-board">
 				{#if $engineStore.enabled}
-					<EvalBar analysis={$engineStore.analysis} loading={$engineStore.loading} />
+					<EvalBar analysis={$engineStore.analysis} loading={$engineStore.loading} fen={currentFenToCopy} />
 				{/if}
 				<div id="myBoard"></div>
 			</div>
