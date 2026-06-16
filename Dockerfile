@@ -4,8 +4,8 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY frontend/ ./
-ARG PUBLIC_SUPABASE_URL=https://dfduaqekmxcufkpjbixz.supabase.co
-ARG PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ecIXUN6KQCyMaepNl3NdMA_JLofA0Nx
+ARG PUBLIC_SUPABASE_URL
+ARG PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ENV PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL
 ENV PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLIC_SUPABASE_PUBLISHABLE_KEY
 RUN npm run build
