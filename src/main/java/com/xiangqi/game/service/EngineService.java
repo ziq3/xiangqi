@@ -21,11 +21,17 @@ public class EngineService {
     SseEmitter currentEmitter;
 
     public EngineService() {
-        File exeFile = new File("engine/pikafish-bmi2.exe");
+        String osName = System.getProperty("os.name").toLowerCase();
+        String exePath = osName.contains("win") ? "engine/pikafish-bmi2.exe" : "engine/pikafish";
+        File exeFile = new File(exePath);
+
         if (!exeFile.exists()) {
             throw new RuntimeException("Could not find executable at: " + exeFile.getAbsolutePath());
         }
-
+        // Ensure the binary has execute permissions on Linux
+        if (!osName.contains("win")) {
+            exeFile.setExecutable(true);
+        }
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(exeFile.getAbsolutePath());
             processBuilder.redirectErrorStream(true);
