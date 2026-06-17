@@ -9,6 +9,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import com.xiangqi.game.dto.EngineAnalysis;
 
 import java.io.*;
+import java.util.Map;
+import java.util.concurrent.*;
 
 @Service
 public class EngineService {
@@ -16,6 +18,22 @@ public class EngineService {
     private static final Logger logger = LoggerFactory.getLogger(EngineService.class);
 
     private final String enginePath;
+    private final Map<String, AnalysisSession> sessions = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private final Map<String, ScheduledFuture<?>> cleanupTasks = new ConcurrentHashMap<>();
+
+    private static class AnalysisSession {
+        final Process process;
+        final BufferedReader reader;
+        final BufferedWriter writer;
+        volatile SseEmitter currentEmitter;
+
+        AnalysisSession(Process process, BufferedReader reader, BufferedWriter writer) {
+            this.process = process;
+            this.reader = reader;
+            this.writer = writer;
+        }
+    }
 
     public EngineService() {
         String osName = System.getProperty("os.name").toLowerCase();
@@ -93,112 +111,174 @@ public class EngineService {
                 } else {
                     writer.write("quit\n");
                     writer.flush();
+                    if ("(none)".equals(bestMove)) {
+                        return new EngineMoveResult(fen, "(none)");
+                    }
                 }
             }
         } catch (IOException e) {
             logger.error("Error communicating with engine for FEN {}", fen, e);
         } finally {
             if (process != null) {
-                process.destroy();
+                process.destroyForcibly();
             }
         }
         return null;
     }
 
-    public SseEmitter streamAnalysis(String fen) {
+    public SseEmitter streamAnalysis(String fen, String sessionId) {
         fen = normalizeFen(fen);
-        Process process;
-        try {
-            ProcessBuilder processBuilder = new ProcessBuilder(enginePath);
-            processBuilder.redirectErrorStream(true);
-            process = processBuilder.start();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to start engine process", e);
+
+        // Cancel any pending cleanup for this session
+        ScheduledFuture<?> pendingCleanup = cleanupTasks.remove(sessionId);
+        if (pendingCleanup != null) {
+            pendingCleanup.cancel(false);
         }
 
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+        AnalysisSession session = sessions.get(sessionId);
         SseEmitter emitter = new SseEmitter(0L);
 
-        Runnable cleanup = () -> {
+        if (session == null) {
+            // Start a new process
+            Process process;
             try {
-                writer.write("quit\n");
-                writer.flush();
-            } catch (Exception ignored) {
+                ProcessBuilder processBuilder = new ProcessBuilder(enginePath);
+                processBuilder.redirectErrorStream(true);
+                process = processBuilder.start();
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to start engine process", e);
             }
-            try {
-                writer.close();
-            } catch (Exception ignored) {
-            }
-            try {
-                reader.close();
-            } catch (Exception ignored) {
-            }
-            process.destroy();
-        };
 
-        emitter.onCompletion(cleanup);
-        emitter.onTimeout(cleanup);
-        emitter.onError(e -> cleanup.run());
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
 
-        try {
-            writer.write("position fen " + fen + "\n");
-            writer.write("go infinite\n");
-            writer.flush();
-        } catch (IOException e) {
-            cleanup.run();
-            emitter.completeWithError(e);
-            return emitter;
-        }
+            final AnalysisSession newSession = new AnalysisSession(process, reader, writer);
+            newSession.currentEmitter = emitter;
 
-        new Thread(() -> {
-            try {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.startsWith("info ")) {
-                        String[] parts = line.split(" ");
-                        Integer scoreCp = null;
-                        Integer mate = null;
-                        String bestMove = null;
+            new Thread(() -> {
+                try {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("info ")) {
+                            String[] parts = line.split(" ");
+                            Integer scoreCp = null;
+                            Integer mate = null;
+                            String bestMove = null;
 
-                        for (int i = 0; i < parts.length; i++) {
-                            if (parts[i].equals("score") && i + 2 < parts.length) {
-                                if (parts[i + 1].equals("cp")) {
-                                    try {
-                                        scoreCp = Integer.parseInt(parts[i + 2]);
-                                    } catch (Exception ignored) {
+                            for (int i = 0; i < parts.length; i++) {
+                                if (parts[i].equals("score") && i + 2 < parts.length) {
+                                    if (parts[i + 1].equals("cp")) {
+                                        try {
+                                            scoreCp = Integer.parseInt(parts[i + 2]);
+                                        } catch (Exception ignored) {
+                                        }
+                                    } else if (parts[i + 1].equals("mate")) {
+                                        try {
+                                            mate = Integer.parseInt(parts[i + 2]);
+                                        } catch (Exception ignored) {
+                                        }
                                     }
-                                } else if (parts[i + 1].equals("mate")) {
+                                } else if (parts[i].equals("pv") && i + 1 < parts.length) {
+                                    bestMove = parts[i + 1];
+                                    break;
+                                }
+                            }
+
+                            if (scoreCp != null || mate != null) {
+                                EngineAnalysis analysisObject = new EngineAnalysis(scoreCp, mate, bestMove);
+                                SseEmitter activeEmitter = newSession.currentEmitter;
+                                if (activeEmitter != null) {
                                     try {
-                                        mate = Integer.parseInt(parts[i + 2]);
-                                    } catch (Exception ignored) {
+                                        activeEmitter.send(SseEmitter.event().data(analysisObject));
+                                    } catch (Exception e) {
+                                        newSession.currentEmitter = null;
                                     }
                                 }
-                            } else if (parts[i].equals("pv") && i + 1 < parts.length) {
-                                bestMove = parts[i + 1];
-                                break;
-                            }
-                        }
-
-                        if (scoreCp != null || mate != null) {
-                            EngineAnalysis analysisObject = new EngineAnalysis(scoreCp, mate, bestMove);
-                            try {
-                                emitter.send(SseEmitter.event().data(analysisObject));
-                            } catch (Exception e) {
-                                logger.warn("Failed to send analysis data to emitter: {}", e.getMessage());
-                                cleanup.run();
-                                break;
                             }
                         }
                     }
+                } catch (IOException e) {
+                    logger.error("Engine read error in streamAnalysis thread for session {}", sessionId, e);
+                } finally {
+                    cleanupSession(sessionId);
                 }
-            } catch (IOException e) {
-                logger.error("Engine read error in streamAnalysis thread", e);
-            } finally {
-                cleanup.run();
+            }).start();
+
+            sessions.put(sessionId, newSession);
+            session = newSession;
+        } else {
+            // Re-use existing process, complete old emitter
+            SseEmitter oldEmitter = session.currentEmitter;
+            if (oldEmitter != null) {
+                try {
+                    oldEmitter.complete();
+                } catch (Exception ignored) {
+                }
             }
-        }).start();
+            session.currentEmitter = emitter;
+        }
+
+        // Setup emitter cleanup callback (on timeout, error, completion)
+        final AnalysisSession activeSession = session;
+        Runnable onDisconnect = () -> {
+            if (activeSession.currentEmitter == emitter) {
+                activeSession.currentEmitter = null;
+                // Schedule process cleanup in 5 seconds
+                ScheduledFuture<?> future = scheduler.schedule(() -> {
+                    cleanupSession(sessionId);
+                }, 5, TimeUnit.SECONDS);
+                cleanupTasks.put(sessionId, future);
+            }
+        };
+
+        emitter.onCompletion(onDisconnect);
+        emitter.onTimeout(onDisconnect);
+        emitter.onError(e -> onDisconnect.run());
+
+        // Send commands to engine
+        synchronized (session) {
+            try {
+                session.writer.write("stop\n");
+                session.writer.write("setoption name Hash value 16\n");
+                session.writer.write("setoption name Threads value 1\n");
+                session.writer.write("position fen " + fen + "\n");
+                session.writer.write("go infinite\n");
+                session.writer.flush();
+            } catch (IOException e) {
+                cleanupSession(sessionId);
+                emitter.completeWithError(e);
+            }
+        }
 
         return emitter;
+    }
+
+    private void cleanupSession(String sessionId) {
+        AnalysisSession session = sessions.remove(sessionId);
+        cleanupTasks.remove(sessionId);
+        if (session != null) {
+            try {
+                session.writer.write("quit\n");
+                session.writer.flush();
+            } catch (Exception ignored) {
+            }
+            try {
+                session.writer.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                session.reader.close();
+            } catch (Exception ignored) {
+            }
+            session.process.destroyForcibly();
+        }
+    }
+
+    @PreDestroy
+    public void cleanup() {
+        for (String sessionId : sessions.keySet()) {
+            cleanupSession(sessionId);
+        }
+        scheduler.shutdownNow();
     }
 }

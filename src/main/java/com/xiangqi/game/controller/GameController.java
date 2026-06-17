@@ -90,14 +90,22 @@ public class GameController {
             @RequestBody MoveRequest payload,
             Principal principal) {
 
+        String id = null;
+        if (principal instanceof JwtAuthenticationToken jwtToken) {
+            id = jwtToken.getName();
+        }
+
         Room room = roomService.applyMove(roomId, payload.fen(), payload.move(),
-                Boolean.TRUE.equals(payload.checkmate()));
+                Boolean.TRUE.equals(payload.checkmate()), id);
         return broadcast(room);
     }
 
     @GetMapping(value = "/api/engine/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamEngine(@RequestParam String fen) {
-        return engineService.streamAnalysis(fen);
+    public SseEmitter streamEngine(@RequestParam String fen, @RequestParam(required = false) String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            sessionId = java.util.UUID.randomUUID().toString();
+        }
+        return engineService.streamAnalysis(fen, sessionId);
     }
 
     /** Builds the response and pushes it to every SSE subscriber of the room. */

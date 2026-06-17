@@ -17,20 +17,22 @@ public record RoomStateResponse(
         long hostTimeMs,
         long guestTimeMs,
         String endReason,
-        String moveHistory) {
+        String moveHistory,
+        boolean botGame) {
 
     public static RoomStateResponse from(Room room, RoomService roomService) {
         RoomService.ClockView clock = roomService.computeClockView(room);
         return new RoomStateResponse(
                 room.getRoomId(),
                 room.getHostName(),
-                room.getGuestName(),
+                room.getGuestName() == null ? "" : room.getGuestName(),
                 room.getTurn().name(),
                 room.getStatus().name(),
                 room.getFen(),
                 clock.hostRemainingMs(),
                 clock.guestRemainingMs(),
                 room.getEndReason() == null ? null : room.getEndReason().name(),
-                room.getMoveHistory());
+                room.getMoveHistory(),
+                room.isBotGame());
     }
 }

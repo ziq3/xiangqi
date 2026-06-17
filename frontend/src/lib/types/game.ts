@@ -13,6 +13,7 @@ export interface RoomState {
 	guestTimeMs: number;
 	endReason: string | null;
 	moveHistory: string;
+	botGame: boolean;
 }
 
 export class ApiError extends Error {
@@ -39,7 +40,7 @@ export function parseRoomState(payload: unknown): RoomState {
 	}
 
 	const candidate = payload as Record<string, unknown>;
-	const { roomId, hostName, guestName, turn, status, fen, hostTimeMs, guestTimeMs, endReason, moveHistory } =
+	const { roomId, hostName, guestName, turn, status, fen, hostTimeMs, guestTimeMs, endReason, moveHistory, botGame } =
 		candidate;
 
 	if (
@@ -68,6 +69,7 @@ export function parseRoomState(payload: unknown): RoomState {
 		hostTimeMs: safeHostTimeMs,
 		guestTimeMs: safeGuestTimeMs,
 		endReason: safeEndReason,
-		moveHistory: safeMoveHistory
+		moveHistory: safeMoveHistory,
+		botGame: Boolean(botGame)
 	};
 }

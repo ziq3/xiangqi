@@ -85,11 +85,15 @@ public class Room {
     @Column(length = 36)
     private String guestId; // Supabase UUID (sub claim)
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean botGame;
+
     public Room() {
         this.turn = Turn.HOST;
         this.status = Status.WAITING;
         this.fen = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
-        this.guestName = "BOT";
+        this.guestName = null;
+        this.botGame = false;
 
         // 15 + 30 time control defaults (clock starts when room becomes PLAYING).
         this.clockBaseMs = 15L * 60L * 1000L;
@@ -102,6 +106,6 @@ public class Room {
     }
 
     public boolean canJoin() {
-        return guestName.equals("BOT");
+        return this.status == Status.WAITING;
     }
 }

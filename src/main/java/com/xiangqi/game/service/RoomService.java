@@ -145,14 +145,33 @@ public class RoomService {
   public Room startRoom(String roomId) {
     Room room = getRoomForUpdate(roomId);
     if (room.getStatus() == Status.WAITING) {
+      if (room.getGuestName() == null) {
+        room.setGuestName("BOT");
+        room.setBotGame(true);
+      }
       room.setStatus(Status.PLAYING);
       ensureClockStarted(room, nowMs());
     }
     return room;
   }
 
+  private void makeMove(Room room, String fen, String move, long nowMs) {
+    String currentHistory = room.getMoveHistory();
+    if (currentHistory == null || currentHistory.isBlank()) {
+      room.setMoveHistory(move);
+    } else {
+      room.setMoveHistory(currentHistory + " " + move);
+    }
+    Turn mover = room.getTurn();
+    room.setFen(fen);
+    boolean hostTurn = mover == Turn.HOST;
+    room.setTurn(hostTurn ? Turn.GUEST : Turn.HOST);
+    addIncrement(room, mover);
+    room.setTurnStartedAtEpochMs(nowMs);
+  }
+
   @Transactional
-  public Room applyMove(String roomId, String fen, String move, boolean isCheckmate) {
+  public Room applyMove(String roomId, String fen, String move, boolean isCheckmate, String requestingUserId) {
     Room room = getRoomForUpdate(roomId);
     long now = nowMs();
     ensureClockStarted(room, now);
@@ -161,41 +180,55 @@ public class RoomService {
       return room;
     }
 
-    room.setMoveHistory(room.getMoveHistory() + " " + move);
+    // Authorization check
+    if (room.getTurn() == Turn.HOST) {
+      if (room.getHostId() != null && !room.getHostId().equals(requestingUserId)) {
+        throw new IllegalStateException("Not your turn or unauthorized");
+      }
+    } else {
+      if (room.getGuestId() != null && !room.getGuestId().equals(requestingUserId)) {
+        throw new IllegalStateException("Not your turn or unauthorized");
+      }
+    }
 
-    Turn mover = room.getTurn();
-    room.setFen(fen);
-    boolean hostTurn = room.getTurn() == Turn.HOST;
-    room.setTurn(hostTurn ? Turn.GUEST : Turn.HOST);
-    addIncrement(room, mover);
-    room.setTurnStartedAtEpochMs(now);
-
-    if (isCheckmate) {
+    // 1. Direct checkmate/stalemate submission with no move (e.g. at the start of a
+    // player's turn)
+    if (isCheckmate && (move == null || move.isBlank())) {
       room.setStatus(Status.FINISHED);
-      room.setEndReason(hostTurn ? EndReason.CHECKMATE_HOST : EndReason.CHECKMATE_GUEST);
+      room.setEndReason(room.getTurn() == Turn.HOST ? EndReason.CHECKMATE_GUEST : EndReason.CHECKMATE_HOST);
       room.setTurnStartedAtEpochMs(0L);
       return room;
     }
 
-    if ("BOT".equals(room.getGuestName())) {
-      applyElapsedForTurn(room, now);
+    // 2. Apply player's move
+    Turn playerSide = room.getTurn();
+    makeMove(room, fen, move, now);
+
+    if (isCheckmate) {
+      room.setStatus(Status.FINISHED);
+      room.setEndReason(playerSide == Turn.HOST ? EndReason.CHECKMATE_GUEST : EndReason.CHECKMATE_HOST);
+      room.setTurnStartedAtEpochMs(0L);
+      return room;
+    }
+
+    // 3. Apply BOT's move if the opponent is BOT
+    if (room.isBotGame()) {
+      long botStartNow = nowMs();
+      applyElapsedForTurn(room, botStartNow);
       if (room.getStatus() != Status.PLAYING) {
         return room;
       }
-      Turn botMover = room.getTurn();
-      EngineService.EngineMoveResult result = engineService.getFenAfterBestMove(fen);
-      if (result != null && result.fen() != null && result.move() != null) {
-        room.setFen(result.fen());
-        String currentHistory = room.getMoveHistory();
-        if (currentHistory == null || currentHistory.isBlank()) {
-          room.setMoveHistory(result.move());
-        } else {
-          room.setMoveHistory(currentHistory.trim() + " " + result.move());
+      EngineService.EngineMoveResult result = engineService.getFenAfterBestMove(room.getFen());
+      if (result != null) {
+        if ("(none)".equals(result.move())) {
+          room.setStatus(Status.FINISHED);
+          room.setEndReason(room.getTurn() == Turn.HOST ? EndReason.CHECKMATE_HOST : EndReason.CHECKMATE_GUEST);
+          room.setTurnStartedAtEpochMs(0L);
+        } else if (result.fen() != null && result.move() != null) {
+          long botEndNow = nowMs();
+          makeMove(room, result.fen(), result.move(), botEndNow);
+
         }
-        boolean botWasHostTurn = botMover == Turn.HOST;
-        room.setTurn(botWasHostTurn ? Turn.GUEST : Turn.HOST);
-        addIncrement(room, botMover);
-        room.setTurnStartedAtEpochMs(now);
       }
     }
     return room;

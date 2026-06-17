@@ -8,6 +8,10 @@ interface EngineState {
 	enabled: boolean;
 }
 
+const sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+	? crypto.randomUUID()
+	: Math.random().toString(36).substring(2) + Date.now().toString(36);
+
 function createEngineStore() {
 	const { subscribe, update, set } = writable<EngineState>({
 		analysis: null,
@@ -34,7 +38,7 @@ function createEngineStore() {
 		});
 
 		try {
-			const url = `/api/engine/stream?fen=${encodeURIComponent(fen)}`;
+			const url = `/api/engine/stream?fen=${encodeURIComponent(fen)}&sessionId=${sessionId}`;
 			eventSource = new EventSource(url);
 
 			eventSource.onmessage = (event) => {

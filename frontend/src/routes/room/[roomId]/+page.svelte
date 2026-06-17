@@ -238,6 +238,10 @@
 			notice = 'Chiếu hết!';
 			return;
 		}
+		if (typeof game.in_stalemate === 'function' && game.in_stalemate()) {
+			notice = 'Hết nước đi (Thua)!';
+			return;
+		}
 		if (typeof game.in_draw === 'function' && game.in_draw()) {
 			notice = 'Hoà cờ.';
 			return;
@@ -284,7 +288,7 @@
 		return () => {
 			unsubscribeStore?.();
 			gameStore.stopRoomSync();
-			engineStore.stopAnalysis();
+			engineStore.setEnabled(false);
 			board?.destroy();
 			board = null;
 			game = null;
@@ -292,11 +296,32 @@
 	});
 
 	$: myTurn = isMyTurn(room);
-	$: isBotMode = room?.guestName === 'BOT';
+	$: isBotMode = room?.botGame === true;
 	$: isWaiting = room?.status === 'WAITING';
 	$: isPlaying = room?.status === 'PLAYING';
 	$: isFinished = room?.status === 'FINISHED';
 	$: isHost = room?.hostName === currentPlayerName;
+
+	// Disable engine analysis when game starts playing (prevent cheating/visual bugs)
+	$: {
+		if (isPlaying && analysisEnabled) {
+			engineStore.setEnabled(false);
+		}
+	}
+
+	// Automatically submit checkmate/stalemate if it is our turn, the game is active, and we have no legal moves
+	$: {
+		if (room && room.status === 'PLAYING' && isMyTurn(room) && game && !$gameStore.pendingMove) {
+			const hasNoMoves = typeof game.generate_moves === 'function' && game.generate_moves().length === 0;
+			if (hasNoMoves) {
+				const isCheckmate = typeof game.in_checkmate === 'function' && game.in_checkmate();
+				const isStalemate = typeof game.in_stalemate === 'function' && game.in_stalemate();
+				if (isCheckmate || isStalemate) {
+					gameStore.submitMove(roomId, room.fen, '', true).catch(console.error);
+				}
+			}
+		}
+	}
 </script>
 
 <svelte:head>
