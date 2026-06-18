@@ -312,7 +312,7 @@
 	// Automatically submit checkmate/stalemate if it is our turn, the game is active, and we have no legal moves
 	$: {
 		if (room && room.status === 'PLAYING' && isMyTurn(room) && game && !$gameStore.pendingMove) {
-			const hasNoMoves = typeof game.generate_moves === 'function' && game.generate_moves().length === 0;
+			const hasNoMoves = typeof game.moves === 'function' && game.moves().length === 0;
 			if (hasNoMoves) {
 				const isCheckmate = typeof game.in_checkmate === 'function' && game.in_checkmate();
 				const isStalemate = typeof game.in_stalemate === 'function' && game.in_stalemate();

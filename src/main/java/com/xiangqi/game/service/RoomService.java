@@ -244,10 +244,10 @@ public class RoomService {
       long now = nowMs();
       ClockView view = computeClockView(room, now);
       if (isTimedOut(view, room.getTurn())) {
-        Room locked = getRoomForUpdate(roomId);
-        ensureClockStarted(locked, now);
-        applyElapsedForTurn(locked, now);
-        return locked;
+        room = getRoomForUpdate(roomId);
+        ensureClockStarted(room, now);
+        applyElapsedForTurn(room, now);
+        return room;
       }
     }
 
