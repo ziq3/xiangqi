@@ -157,48 +157,71 @@ public class EngineService {
 
             new Thread(() -> {
                 try {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.startsWith("info ")) {
-                            String[] parts = line.split(" ");
-                            Integer scoreCp = null;
-                            Integer mate = null;
-                            String bestMove = null;
+                    while (true) {
+                        // Non-blocking check: is there engine output to read?
+                        if (reader.ready()) {
+                            String line = reader.readLine();
+                            if (line == null) break; // process ended
 
-                            for (int i = 0; i < parts.length; i++) {
-                                if (parts[i].equals("score") && i + 2 < parts.length) {
-                                    if (parts[i + 1].equals("cp")) {
-                                        try {
-                                            scoreCp = Integer.parseInt(parts[i + 2]);
-                                        } catch (Exception ignored) {
-                                        }
-                                    } else if (parts[i + 1].equals("mate")) {
-                                        try {
-                                            mate = Integer.parseInt(parts[i + 2]);
-                                        } catch (Exception ignored) {
-                                        }
-                                    }
-                                } else if (parts[i].equals("pv") && i + 1 < parts.length) {
-                                    bestMove = parts[i + 1];
-                                    break;
-                                }
-                            }
+                            if (line.startsWith("info ")) {
+                                String[] parts = line.split(" ");
+                                Integer scoreCp = null;
+                                Integer mate = null;
+                                String bestMove = null;
 
-                            if (scoreCp != null || mate != null) {
-                                EngineAnalysis analysisObject = new EngineAnalysis(scoreCp, mate, bestMove);
-                                SseEmitter activeEmitter = newSession.currentEmitter;
-                                if (activeEmitter != null) {
-                                    try {
-                                        activeEmitter.send(SseEmitter.event().data(analysisObject));
-                                    } catch (Exception e) {
-                                        newSession.currentEmitter = null;
+                                for (int i = 0; i < parts.length; i++) {
+                                    if (parts[i].equals("score") && i + 2 < parts.length) {
+                                        if (parts[i + 1].equals("cp")) {
+                                            try {
+                                                scoreCp = Integer.parseInt(parts[i + 2]);
+                                            } catch (Exception ignored) {
+                                            }
+                                        } else if (parts[i + 1].equals("mate")) {
+                                            try {
+                                                mate = Integer.parseInt(parts[i + 2]);
+                                            } catch (Exception ignored) {
+                                            }
+                                        }
+                                    } else if (parts[i].equals("pv") && i + 1 < parts.length) {
+                                        bestMove = parts[i + 1];
+                                        break;
                                     }
                                 }
+
+                                if (scoreCp != null || mate != null) {
+                                    EngineAnalysis analysisObject = new EngineAnalysis(scoreCp, mate, bestMove);
+                                    SseEmitter activeEmitter = newSession.currentEmitter;
+                                    if (activeEmitter != null) {
+                                        try {
+                                            activeEmitter.send(SseEmitter.event().data(analysisObject));
+                                        } catch (Exception e) {
+                                            newSession.currentEmitter = null;
+                                            cleanupSession(sessionId);
+                                            return;
+                                        }
+                                    }
+                                }
                             }
+                        } else {
+                            // Engine idle (e.g. stalemate — no output after bestmove).
+                            // Ping the SSE connection to detect closed tabs.
+                            SseEmitter activeEmitter = newSession.currentEmitter;
+                            if (activeEmitter != null) {
+                                try {
+                                    activeEmitter.send(SseEmitter.event().comment("ping"));
+                                } catch (Exception e) {
+                                    newSession.currentEmitter = null;
+                                    cleanupSession(sessionId);
+                                    return;
+                                }
+                            }
+                            Thread.sleep(2000);
                         }
                     }
                 } catch (IOException e) {
                     logger.error("Engine read error in streamAnalysis thread for session {}", sessionId, e);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 } finally {
                     cleanupSession(sessionId);
                 }
