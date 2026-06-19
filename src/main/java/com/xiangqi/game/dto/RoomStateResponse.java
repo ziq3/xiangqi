@@ -18,7 +18,9 @@ public record RoomStateResponse(
         long guestTimeMs,
         String endReason,
         String moveHistory,
-        boolean botGame) {
+        boolean botGame,
+        boolean hostReady,
+        boolean guestReady) {
 
     public static RoomStateResponse from(Room room, RoomService roomService) {
         RoomService.ClockView clock = roomService.computeClockView(room);
@@ -33,6 +35,8 @@ public record RoomStateResponse(
                 clock.guestRemainingMs(),
                 room.getEndReason() == null ? null : room.getEndReason().name(),
                 room.getMoveHistory(),
-                room.isBotGame());
+                room.isBotGame(),
+                room.isHostReady(),
+                room.isGuestReady());
     }
 }

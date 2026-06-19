@@ -28,13 +28,15 @@ public class GameController {
     }
 
     @PostMapping("/api/room/create")
-    public RoomStateResponse createRoom(@RequestParam(required = false) String hostName, Principal principal) {
+    public RoomStateResponse createRoom(@RequestParam(required = false) String hostName,
+            @RequestParam(defaultValue = "false") boolean isBotGame,
+            Principal principal) {
         String resolvedHost = resolvePlayerName(hostName, principal);
         String id = null;
         if (principal instanceof JwtAuthenticationToken jwtToken) {
             id = jwtToken.getName();
         }
-        Room room = roomService.createRoom(resolvedHost, id);
+        Room room = roomService.createRoom(resolvedHost, id, isBotGame);
         return RoomStateResponse.from(room, roomService);
     }
 
@@ -75,9 +77,10 @@ public class GameController {
         return roomEventService.subscribe(roomId);
     }
 
-    @PostMapping("/api/room/{roomId}/start")
-    public RoomStateResponse startRoom(@PathVariable String roomId) {
-        Room room = roomService.startRoom(roomId);
+    @PostMapping("/api/room/{roomId}/ready")
+    public RoomStateResponse readyRoom(@PathVariable String roomId,
+            @RequestParam String side) {
+        Room room = roomService.readyRoom(roomId, side);
         return broadcast(room);
     }
 

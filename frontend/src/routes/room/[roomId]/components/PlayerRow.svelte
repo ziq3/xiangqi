@@ -5,9 +5,10 @@
 		timeMs: number;
 		isActive: boolean;
 		isYou: boolean;
+		showReady?: boolean;
 	}
 
-	let { name, icon, timeMs, isActive, isYou }: Props = $props();
+	let { name, icon, timeMs, isActive, isYou, showReady = false }: Props = $props();
 
 	function formatMs(ms: number): string {
 		const safe = Number.isFinite(ms) ? Math.max(0, Math.floor(ms)) : 0;
@@ -23,6 +24,12 @@
 		<span class="player-icon">{icon}</span>
 		<span class="player-name">{name}</span>
 		{#if isYou}<span class="player-you-badge">Bạn</span>{/if}
+		{#if showReady}
+			<span class="player-ready-badge">
+				<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+				Sẵn sàng
+			</span>
+		{/if}
 	</div>
 	<div class="player-clock" class:clock--urgent={timeMs < 30000}>
 		{formatMs(timeMs)}
@@ -73,6 +80,22 @@
 		color: var(--accent-light);
 		background: var(--accent-dim);
 		border: 1px solid var(--border-accent);
+		border-radius: 99px;
+		padding: 0.1rem 0.4rem;
+		flex-shrink: 0;
+	}
+
+	.player-ready-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--success-light, #4ade80);
+		background: rgba(74, 222, 128, 0.08);
+		border: 1px solid rgba(74, 222, 128, 0.3);
 		border-radius: 99px;
 		padding: 0.1rem 0.4rem;
 		flex-shrink: 0;

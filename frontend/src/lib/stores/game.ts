@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { createRoomChannel, type RoomChannel } from '$lib/realtime/roomChannel';
-import { getRoom, updateRoomFen, startRoom as startRoomApi } from '$lib/api/room';
+import { getRoom, updateRoomFen, readyRoom as readyRoomApi } from '$lib/api/room';
 import type { RoomState } from '$lib/types/game';
 
 interface GameState {
@@ -28,19 +28,6 @@ function createGameStore() {
 			return room;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Failed to load room';
-			update((current) => ({ ...current, loading: false, error: message }));
-			return null;
-		}
-	}
-
-	async function startGame(roomId: string) {
-		update((current) => ({ ...current, loading: true, error: '' }));
-		try {
-			const room = await startRoomApi(roomId);
-			update((current) => ({ ...current, room, loading: false }));
-			return room;
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Failed to start game';
 			update((current) => ({ ...current, loading: false, error: message }));
 			return null;
 		}
@@ -102,6 +89,19 @@ function createGameStore() {
 		await channel.start();
 	}
 
+	async function readyGame(roomId: string, side: 'HOST' | 'GUEST') {
+		update((current) => ({ ...current, loading: true, error: '' }));
+		try {
+			const room = await readyRoomApi(roomId, side);
+			update((current) => ({ ...current, room, loading: false }));
+			return room;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Failed to set ready';
+			update((current) => ({ ...current, loading: false, error: message }));
+			return null;
+		}
+	}
+
 	function stopRoomSync() {
 		channel?.stop();
 		channel = null;
@@ -120,7 +120,7 @@ function createGameStore() {
 	return {
 		subscribe,
 		loadRoom,
-		startGame,
+		readyGame,
 		submitMove,
 		startRoomSync,
 		stopRoomSync,

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { createRoom as createRoomApi, joinRoom as joinRoomApi, listMatches, startRoom as startRoomApi } from '$lib/api/room';
+	import { createRoom as createRoomApi, joinRoom as joinRoomApi, listMatches } from '$lib/api/room';
 	import { authStore, resolveDisplayName } from '$lib/stores/auth';
 	import type { RoomState } from '$lib/types/game';
 
@@ -36,8 +36,7 @@
 		errorMessage = '';
 		creatingBotRoom = true;
 		try {
-			const room = await createRoomApi(displayName);
-			await startRoomApi(room.roomId);
+			const room = await createRoomApi(displayName, true);
 			goto(`/room/${room.roomId}`);
 		} catch (error) {
 			errorMessage = error instanceof Error ? error.message : 'Không thể tạo phòng chơi với BOT';
@@ -45,6 +44,7 @@
 			creatingBotRoom = false;
 		}
 	}
+
 
 	async function createRoomWithFriend() {
 		errorMessage = '';

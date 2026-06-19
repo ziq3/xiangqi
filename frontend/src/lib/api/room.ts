@@ -1,9 +1,9 @@
 import { apiRequest } from '$lib/api/client';
 import { parseRoomState, type RoomState } from '$lib/types/game';
 
-export async function createRoom(hostName: string): Promise<RoomState> {
+export async function createRoom(hostName: string, isBotGame = false): Promise<RoomState> {
 	const response = await apiRequest<unknown>(
-		`/api/room/create?hostName=${encodeURIComponent(hostName)}`,
+		`/api/room/create?hostName=${encodeURIComponent(hostName)}&isBotGame=${isBotGame}`,
 		{
 			method: 'POST'
 		}
@@ -28,10 +28,11 @@ export async function getRoom(roomId: string): Promise<RoomState> {
 	return parseRoomState(response);
 }
 
-export async function startRoom(roomId: string): Promise<RoomState> {
-	const response = await apiRequest<unknown>(`/api/room/${encodeURIComponent(roomId)}/start`, {
-		method: 'POST'
-	});
+export async function readyRoom(roomId: string, side: 'HOST' | 'GUEST'): Promise<RoomState> {
+	const response = await apiRequest<unknown>(
+		`/api/room/${encodeURIComponent(roomId)}/ready?side=${side}`,
+		{ method: 'POST' }
+	);
 	return parseRoomState(response);
 }
 

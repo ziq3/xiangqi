@@ -138,9 +138,10 @@
 		}
 	}
 
-	async function startGame() {
+	async function setReady() {
 		if (!roomId) return;
-		await gameStore.startGame(roomId);
+		const side = isHost ? 'HOST' : 'GUEST';
+		await gameStore.readyGame(roomId, side);
 	}
 
 	function isMyTurn(activeRoom: RoomState | null): boolean {
@@ -302,6 +303,13 @@
 	$: isFinished = room?.status === 'FINISHED';
 	$: isHost = room?.hostName === currentPlayerName;
 
+	// Show "Sẵn sàng" when: host alone (bot) OR either player in a PvP room
+	$: canClickReady = isWaiting && !iAlreadyReady && (isHost || !!room?.guestName);
+	// Has this client already clicked ready?
+	$: iAlreadyReady = isWaiting && (isHost ? (room?.hostReady ?? false) : (room?.guestReady ?? false));
+	// Show ready badge in player row (only PvP, not bot — BOT is always ready from creation)
+	$: isPvpWaitingForReady = isWaiting && !!room?.guestName && !isBotMode;
+
 	// Disable engine analysis when game starts playing (prevent cheating/visual bugs)
 	$: {
 		if (isPlaying && analysisEnabled) {
@@ -384,6 +392,7 @@
 					timeMs={room.hostTimeMs}
 					isActive={isPlaying && room.turn === 'HOST'}
 					isYou={isHost}
+					showReady={isPvpWaitingForReady && (room?.hostReady ?? false)}
 				/>
 
 				<div class="players-divider">
@@ -396,6 +405,7 @@
 					timeMs={room.guestTimeMs}
 					isActive={isPlaying && room.turn === 'GUEST'}
 					isYou={!isHost && !isBotMode}
+					showReady={isPvpWaitingForReady && (room?.guestReady ?? false)}
 				/>
 			</div>
 
@@ -459,8 +469,8 @@
 			</div>
 		{/if}
 
-		<!-- Invite Box -->
-		{#if isWaiting}
+		<!-- Invite Box: only for PvP rooms, not bot games -->
+		{#if isWaiting && !isBotMode}
 			<InviteBox
 				{roomId}
 				{copiedId}
@@ -470,13 +480,11 @@
 			/>
 		{/if}
 
-		<!-- Start button -->
-		{#if isWaiting && isHost}
-			<button id="start-game-btn" class="btn btn-primary start-btn" on:click={startGame}>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-					<polygon points="5 3 19 12 5 21 5 3"/>
-				</svg>
-				Chơi với BOT ngay
+		<!-- Sẵn sàng button: host alone (bot) or PvP before clicking ready -->
+		{#if canClickReady}
+			<button id="ready-btn" class="btn btn-primary ready-btn" on:click={setReady}>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+				Sẵn sàng
 			</button>
 		{/if}
 	</aside>
@@ -734,5 +742,24 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+	}
+
+	/* Compact ready button in sidebar */
+	.ready-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.85rem;
+		padding: 0.5rem 1rem;
+		margin-top: 0.25rem;
+	}
+
+	.waiting-hint {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		text-align: center;
+		margin: 0;
+		padding: 0.5rem 0;
+		font-style: italic;
 	}
 </style>

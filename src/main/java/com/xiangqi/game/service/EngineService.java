@@ -45,7 +45,6 @@ public class EngineService {
             throw new RuntimeException("Could not find executable at: " + exeFile.getAbsolutePath());
         }
 
-        // Ensure the binary has execute permissions on Linux
         if (!isWindows) {
             try {
                 exeFile.setExecutable(true);
@@ -83,7 +82,7 @@ public class EngineService {
                     BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()))) {
 
                 writer.write("position fen " + fen + "\n");
-                writer.write("go movetime 500\n");
+                writer.write("go movetime 100\n");
                 writer.flush();
 
                 String bestMove = null;
@@ -161,7 +160,8 @@ public class EngineService {
                         // Non-blocking check: is there engine output to read?
                         if (reader.ready()) {
                             String line = reader.readLine();
-                            if (line == null) break; // process ended
+                            if (line == null)
+                                break; // process ended
 
                             if (line.startsWith("info ")) {
                                 String[] parts = line.split(" ");
@@ -262,8 +262,6 @@ public class EngineService {
         synchronized (session) {
             try {
                 session.writer.write("stop\n");
-                session.writer.write("setoption name Hash value 16\n");
-                session.writer.write("setoption name Threads value 1\n");
                 session.writer.write("position fen " + fen + "\n");
                 session.writer.write("go infinite\n");
                 session.writer.flush();

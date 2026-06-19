@@ -114,12 +114,17 @@ public class RoomService {
   }
 
   @Transactional
-  public Room createRoom(String hostName, String id) {
+  public Room createRoom(String hostName, String id, boolean isBotGame) {
 
     Room room = new Room();
     room.setRoomId(generateRoomId());
     room.setHostName(hostName);
     room.setHostId(id);
+    if (isBotGame) {
+      room.setBotGame(true);
+      room.setGuestName("BOT");
+      room.setGuestReady(true);
+    }
     return roomRepository.save(room);
   }
 
@@ -135,20 +140,24 @@ public class RoomService {
       if (id != null) {
         room.setGuestId(id);
       }
-      room.setStatus(Status.PLAYING);
-      ensureClockStarted(room, nowMs());
     }
     return room;
   }
 
   @Transactional
-  public Room startRoom(String roomId) {
+  public Room readyRoom(String roomId, String side) {
     Room room = getRoomForUpdate(roomId);
-    if (room.getStatus() == Status.WAITING) {
-      if (room.getGuestName() == null) {
-        room.setGuestName("BOT");
-        room.setBotGame(true);
-      }
+    if (room.getStatus() != Status.WAITING) {
+      return room;
+    }
+
+    if ("HOST".equals(side)) {
+      room.setHostReady(true);
+    } else if ("GUEST".equals(side)) {
+      room.setGuestReady(true);
+    }
+
+    if (room.isHostReady() && room.isGuestReady()) {
       room.setStatus(Status.PLAYING);
       ensureClockStarted(room, nowMs());
     }
