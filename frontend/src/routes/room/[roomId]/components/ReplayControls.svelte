@@ -6,6 +6,7 @@
 		isFinished: boolean;
 		copiedFen: boolean;
 		engineEnabled: boolean;
+		showAnalysisToggle?: boolean;
 		onNavigate: (index: number) => void;
 		onCopyFen: () => void;
 		onToggleEngine: () => void;
@@ -18,6 +19,7 @@
 		isFinished,
 		copiedFen,
 		engineEnabled,
+		showAnalysisToggle = true,
 		onNavigate,
 		onCopyFen,
 		onToggleEngine
@@ -108,26 +110,28 @@
 
 	{#if isFinished || !isPlaying}
 		<div style="width: 1px; background: var(--border); margin: 0 4px;"></div>
-		<button
-			class="btn btn-nav"
-			class:btn-analyze-active={engineEnabled}
-			onclick={onToggleEngine}
-			title="Bật/tắt phân tích Engine"
-		>
-			<svg
-				width="18"
-				height="18"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
+		{#if showAnalysisToggle}
+			<button
+				class="btn btn-nav"
+				class:btn-analyze-active={engineEnabled}
+				onclick={onToggleEngine}
+				title="Bật/tắt phân tích Engine"
 			>
-				<circle cx="12" cy="12" r="10"></circle>
-				<polyline points="12 6 12 12 16 14"></polyline>
-			</svg>
-		</button>
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<circle cx="12" cy="12" r="10"></circle>
+					<polyline points="12 6 12 12 16 14"></polyline>
+				</svg>
+			</button>
+		{/if}
 		<button
 			class="btn btn-nav"
 			class:btn-copy-active={copiedFen}

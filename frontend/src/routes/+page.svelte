@@ -222,6 +222,24 @@
 					</button>
 				</div>
 			</div>
+
+			<!-- Option 4: Analysis Mode -->
+			<div class="lobby-card">
+				<div class="lobby-card-header">
+					<div class="lobby-card-icon lobby-card-icon--join">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+						</svg>
+					</div>
+					<div>
+						<h2 class="lobby-card-name">Phân tích</h2>
+						<p class="lobby-card-desc">Xếp bàn cờ, thử nghiệm các nước đi và phân tích với Engine.</p>
+					</div>
+				</div>
+				<a href="/analysis" class="btn btn-ghost" style="text-align: center;">
+					Vào ngay
+				</a>
+			</div>
 		</div>
 
 		<!-- Past matches list -->
@@ -261,7 +279,7 @@
 										<span class="result-badge">Đã kết thúc</span>
 									{/if}
 								</div>
-								<a href="/room/{match.roomId}" class="btn btn-ghost btn-sm btn-replay">
+								<a href="/analysis?roomId={match.roomId}" class="btn btn-ghost btn-sm btn-replay">
 									Xem lại
 								</a>
 							</div>
@@ -430,7 +448,7 @@
 
 		.lobby-cards-container {
 			display: grid;
-			grid-template-columns: repeat(3, 1fr);
+			grid-template-columns: repeat(2, 1fr);
 			gap: 1rem;
 		}
 

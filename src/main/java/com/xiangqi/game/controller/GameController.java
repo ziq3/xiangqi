@@ -111,6 +111,11 @@ public class GameController {
         return engineService.streamAnalysis(fen, sessionId);
     }
 
+    @GetMapping("/api/engine/bestmove")
+    public EngineService.EngineMoveResult getBestMove(@RequestParam String fen) {
+        return engineService.getFenAfterBestMove(fen);
+    }
+
     /** Builds the response and pushes it to every SSE subscriber of the room. */
     private RoomStateResponse broadcast(Room room) {
         RoomStateResponse state = RoomStateResponse.from(room, roomService);

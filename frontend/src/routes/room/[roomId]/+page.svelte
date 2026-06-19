@@ -330,6 +330,17 @@
 			}
 		}
 	}
+
+	// Auto-flip board for guest in PvP
+	$: {
+		if (board && room && !isBotMode) {
+			const isGuest = room.guestName === currentPlayerName && !isHost;
+			const targetOrientation = isGuest ? 'black' : 'red';
+			if (typeof board.orientation === 'function' && board.orientation() !== targetOrientation) {
+				board.orientation(targetOrientation);
+			}
+		}
+	}
 </script>
 
 <svelte:head>
