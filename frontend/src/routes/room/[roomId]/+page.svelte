@@ -5,6 +5,7 @@
 	import { authStore, resolveDisplayName } from '$lib/stores/auth';
 	import type { RoomState } from '$lib/types/game';
 	import { engineStore } from '$lib/stores/engine';
+	import { joinRoom as joinRoomApi } from '$lib/api/room';
 	import EvalBar from './components/EvalBar.svelte';
 	import ReplayControls from './components/ReplayControls.svelte';
 	import PlayerRow from './components/PlayerRow.svelte';
@@ -252,9 +253,33 @@
 	}
 
 	async function setupRoom(roomId: string) {
-		const initialRoom = await gameStore.loadRoom(roomId);
+		let initialRoom = await gameStore.loadRoom(roomId);
 		if (!initialRoom?.fen) {
 			return undefined;
+		}
+
+		// Auto-join when arriving via direct link: if the room is still waiting
+		// for a guest and the current player is not the host and not already
+		// the registered guest, call the join API so guestName is persisted and
+		// the Ready button becomes visible.
+		const playerName = resolveDisplayName($authStore);
+		const isAlreadyHost = initialRoom.hostName === playerName;
+		const isAlreadyGuest = initialRoom.guestName === playerName;
+		if (
+			initialRoom.status === 'WAITING' &&
+			!initialRoom.botGame &&
+			!isAlreadyHost &&
+			!isAlreadyGuest &&
+			!initialRoom.guestName
+		) {
+			try {
+				const joined = await joinRoomApi(roomId, playerName);
+				// Update the store with the joined state so guestName is present.
+				initialRoom = joined;
+				await gameStore.loadRoom(roomId);
+			} catch {
+				// Room may be full or not joinable; continue with read-only view.
+			}
 		}
 
 		const nextGame = new Xiangqi();
@@ -277,11 +302,11 @@
 	}
 
 	onMount(() => {
-		void authStore.init();
-
 		let unsubscribeStore: (() => void) | undefined;
 		if (roomId) {
-			void setupRoom(roomId).then((unsubscribe) => {
+			// Await auth init so resolveDisplayName returns the correct name
+			// before we potentially auto-join via link.
+			void authStore.init().then(() => setupRoom(roomId)).then((unsubscribe) => {
 				unsubscribeStore = unsubscribe;
 			});
 		}
